@@ -295,5 +295,51 @@ columnWidths: {
 4. **Konsistente Logik**: Beide Steuerspalten zeigen Bemessungsgrundlagen
 5. **Platzsparend**: Alle Informationen in einer kompakten Übersicht
 
+## 🖥️ MULTI-PLATFORM SUPPORT (v1.8 - 2025-08-05):
+
+### ✅ Windows Support implementiert:
+- **GitHub Actions**: Automatische Windows-Builds bei jedem Push
+- **Dependencies**: Alle Windows-spezifischen Plugins konfiguriert
+- **Build Output**: ZIP-Datei mit allen benötigten Dateien
+
+### ✅ GitHub Repository Setup:
+- **Repository**: https://github.com/Miboomers/ESPP_Manager
+- **Actions Workflow**: `.github/workflows/build.yml`
+- **Artifacts**: Windows-Builds als ZIP zum Download
+
+### ⚠️ macOS Build Fixes (Xcode Archive):
+1. **Entitlements bereinigt**:
+   - `com.apple.security.keychain-access-groups` entfernt
+   - `com.apple.security.application-groups` entfernt
+   - Nur notwendige Sandbox-Berechtigungen behalten
+
+2. **Info.plist erweitert**:
+   - `LSApplicationCategoryType`: `public.app-category.finance` hinzugefügt
+   - Erforderlich für App Store Distribution
+
+### 📦 Build-Prozesse:
+**macOS (lokal via Xcode):**
+1. Product → Clean Build Folder (⇧⌘K)
+2. Product → Archive
+3. Distribute App → Developer ID → Upload
+4. Automatische Notarisierung durch Xcode
+
+**Windows (via GitHub Actions):**
+1. Push zu GitHub
+2. Automatischer Build
+3. Download von Actions → Artifacts
+
+### 🔧 Wichtige Dateien:
+- `pubspec.yaml`: SDK-Constraint auf `>=3.0.0 <4.0.0` für Kompatibilität
+- `macos/Runner/DebugProfile.entitlements`: Bereinigt
+- `macos/Runner/Release.entitlements`: Bereinigt
+- `macos/Runner/Info.plist`: App-Kategorie hinzugefügt
+- `.github/workflows/build.yml`: Windows Build Workflow
+
+### 💡 Bekannte Einschränkungen:
+- **Windows Code Signing**: Ohne Certificate zeigt Windows Sicherheitswarnung
+- **Workaround**: Nutzer muss "More info" → "Run anyway" klicken
+- **Alternative**: GitHub als vertrauenswürdige Download-Quelle nutzen
+
 ---
-*Status: 🚀 FINAL RELEASE v1.7 - PDF-TABELLEN REDESIGN - 2025-08-04*
+*Status: 🚀 MULTI-PLATFORM RELEASE v1.8 - 2025-08-05*

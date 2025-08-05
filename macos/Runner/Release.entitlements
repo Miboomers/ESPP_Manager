@@ -10,14 +10,5 @@
 	<true/>
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
-	<key>com.apple.security.keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)com.miboomers.esppmanager</string>
-		<string>$(AppIdentifierPrefix)com.miboomers.esppmanager.shared</string>
-	</array>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.miboomers.esppmanager</string>
-	</array>
 </dict>
 </plist>
