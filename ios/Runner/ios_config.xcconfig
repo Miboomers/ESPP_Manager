@@ -1,0 +1,3 @@
+// iOS Configuration
+PRODUCT_BUNDLE_IDENTIFIER = com.miboomers.esppmanager
+DEVELOPMENT_TEAM = V7QY567836
