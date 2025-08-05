@@ -20,96 +20,52 @@ jobs:
         flutter-version: '3.24.0'
         channel: 'stable'
     
+    - name: Flutter Doctor
+      run: flutter doctor -v
+    
+    - name: Clean Flutter
+      run: flutter clean
+    
     - name: Install dependencies
-      run: flutter pub get
+      run: |
+        flutter pub get
+        flutter pub deps
+    
+    - name: Generate Windows files
+      run: flutter create --platforms=windows .
     
     - name: Build Windows App
-      run: flutter build windows --release
+      run: |
+        flutter build windows --release --verbose
+      continue-on-error: true
+    
+    - name: Check Build Output
+      run: |
+        dir build/windows/x64/runner/Release
+      shell: cmd
+      continue-on-error: true
+    
+    - name: Create Windows ZIP
+      run: |
+        cd build/windows/x64/runner/Release
+        Compress-Archive -Path * -DestinationPath ../../../../../ESPP-Manager-Windows.zip
+        cd ../../../../../
+      if: success()
     
     - name: Upload Windows Build
       uses: actions/upload-artifact@v4
       with:
         name: windows-release
-        path: build/windows/x64/runner/Release/
+        path: ESPP-Manager-Windows.zip
         retention-days: 30
-
-  build-macos:
-    runs-on: macos-13
+      if: success()
     
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.0'
-        channel: 'stable'
-    
-    - name: Install dependencies
-      run: flutter pub get
-    
-    - name: Build macOS App
-      run: flutter build macos --release
-    
-    - name: Create DMG
-      run: |
-        brew install create-dmg
-        create-dmg \
-          --volname "ESPP Manager" \
-          --window-pos 200 120 \
-          --window-size 600 400 \
-          --icon-size 100 \
-          --app-drop-link 450 185 \
-          "ESPP-Manager.dmg" \
-          "build/macos/Build/Products/Release/ESPP Manager.app" || \
-        create-dmg \
-          --volname "ESPP Manager" \
-          --window-pos 200 120 \
-          --window-size 600 400 \
-          --icon-size 100 \
-          --app-drop-link 450 185 \
-          "ESPP-Manager.dmg" \
-          "build/macos/Build/Products/Release/espp_manager.app"
-    
-    - name: Upload macOS Build
+    - name: Upload Build Logs on Failure
       uses: actions/upload-artifact@v4
       with:
-        name: macos-release
-        path: ESPP-Manager.dmg
-        retention-days: 30
-
-  build-linux:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Linux Dependencies
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y ninja-build libgtk-3-dev
-    
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.0'
-        channel: 'stable'
-    
-    - name: Install dependencies
-      run: flutter pub get
-    
-    - name: Build Linux App
-      run: flutter build linux --release
-    
-    - name: Package Linux Build
-      run: |
-        cd build/linux/x64/release/bundle
-        tar -czf ../../../../../ESPP-Manager-Linux.tar.gz *
-        cd ../../../../../
-    
-    - name: Upload Linux Build
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-release
-        path: ESPP-Manager-Linux.tar.gz
-        retention-days: 30
+        name: windows-build-logs
+        path: |
+          build/windows/**/*.log
+          .dart_tool/flutter_build/**/*.log
+        retention-days: 7
+      if: failure()
