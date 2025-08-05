@@ -34,7 +34,7 @@ jobs:
         retention-days: 30
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-13
     
     steps:
     - uses: actions/checkout@v4
@@ -54,6 +54,14 @@ jobs:
     - name: Create DMG
       run: |
         brew install create-dmg
+        create-dmg \
+          --volname "ESPP Manager" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --app-drop-link 450 185 \
+          "ESPP-Manager.dmg" \
+          "build/macos/Build/Products/Release/ESPP Manager.app" || \
         create-dmg \
           --volname "ESPP Manager" \
           --window-pos 200 120 \
@@ -93,41 +101,15 @@ jobs:
     - name: Build Linux App
       run: flutter build linux --release
     
-    - name: Create AppImage
+    - name: Package Linux Build
       run: |
-        # Create AppDir structure
-        mkdir -p AppDir/usr/bin
-        cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
-        
-        # Create desktop file
-        cat > AppDir/espp-manager.desktop <<EOF
-        [Desktop Entry]
-        Name=ESPP Manager
-        Comment=Manage your Employee Stock Purchase Plan
-        Exec=espp_manager
-        Icon=espp-manager
-        Type=Application
-        Categories=Office;Finance;
-        EOF
-        
-        # Create AppRun script
-        cat > AppDir/AppRun <<EOF
-        #!/bin/bash
-        HERE="\$(dirname "\$(readlink -f "\${0}")")"
-        exec "\${HERE}/usr/bin/espp_manager" "\$@"
-        EOF
-        chmod +x AppDir/AppRun
-        
-        # Download appimagetool
-        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-        chmod +x appimagetool-x86_64.AppImage
-        
-        # Create AppImage
-        ./appimagetool-x86_64.AppImage AppDir ESPP-Manager-Linux.AppImage
+        cd build/linux/x64/release/bundle
+        tar -czf ../../../../../ESPP-Manager-Linux.tar.gz *
+        cd ../../../../../
     
     - name: Upload Linux Build
       uses: actions/upload-artifact@v4
       with:
         name: linux-release
-        path: ESPP-Manager-Linux.AppImage
+        path: ESPP-Manager-Linux.tar.gz
         retention-days: 30
