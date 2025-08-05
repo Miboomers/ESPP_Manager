@@ -8,47 +8,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-windows:
+  build-windows:
     runs-on: windows-latest
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Check Directory
-      run: |
-        echo "Current directory:"
-        pwd
-        echo "Files:"
-        dir
-    
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.0'
         channel: 'stable'
-    
-    - name: Flutter Version
-      run: flutter --version
-    
-    - name: Flutter Doctor
-      run: flutter doctor
-    
-    - name: Check pubspec.yaml
-      run: |
-        echo "Checking pubspec.yaml:"
-        type pubspec.yaml
-      shell: cmd
     
     - name: Get Dependencies
       run: flutter pub get
     
-    - name: List Windows Directory
-      run: |
-        echo "Windows directory content:"
-        dir windows
-      shell: cmd
-      continue-on-error: true
+    - name: Build Windows App
+      run: flutter build windows --release
     
-    - name: Simple Test Build
-      run: flutter build windows --debug
-      continue-on-error: true
+    - name: Create Windows ZIP
+      run: |
+        cd build/windows/x64/runner/Release
+        Compress-Archive -Path * -DestinationPath ../../../../../ESPP-Manager-Windows.zip
+        cd ../../../../../
+    
+    - name: Upload Windows Build
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-release
+        path: ESPP-Manager-Windows.zip
+        retention-days: 30
