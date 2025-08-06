@@ -101,89 +101,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   
   Widget _buildCloudSyncSection(BuildContext context, SettingsModel settings) {
     final cloudService = ref.watch(cloudSyncServiceProvider);
-    final syncStatus = ref.watch(syncStatusProvider);
-    final currentUser = FirebaseAuth.instance.currentUser;
+    // Temporarily disable syncStatus to isolate the issue
+    // final syncStatus = ref.watch(syncStatusProvider);
     
-    return Column(
-      children: [
-        ListTile(
-          leading: Icon(
-            Icons.cloud_sync,
-            color: currentUser != null ? Colors.green : null,
-          ),
-          title: const Text('Cloud Synchronisation'),
-          subtitle: Text(
-            currentUser != null 
-              ? 'Aktiv - ${currentUser.email}'
-              : 'Nur lokale Speicherung',
-          ),
-          trailing: Switch(
-            value: currentUser != null,
-            onChanged: (value) async {
-              if (value) {
-                // Navigate to Cloud Auth Screen
-                final result = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CloudAuthScreen(
-                      isInitialSetup: true,
-                    ),
-                  ),
-                );
-                
-                if (result == true && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Cloud Sync aktiviert'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } else {
-                // Disable cloud sync
-                await _disableCloudSync();
-              }
-            },
-          ),
-        ),
+    // Simple Firebase check - always enable the toggle for testing
+    bool isFirebaseInitialized = true;  // Force enable for testing
+    
+    debugPrint('🔥 Cloud Sync Toggle: rebuilding section');
+    
+    // Use StreamBuilder to reactively watch Firebase Auth state changes
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        final currentUser = snapshot.data;
+        debugPrint('🔥 Cloud Sync Toggle: currentUser=$currentUser');
         
-        if (currentUser != null) ...[
-          // Sync Status
-          syncStatus.when(
-            data: (status) => ListTile(
+        return Column(
+          children: [
+            ListTile(
               leading: Icon(
-                status.state == SyncState.syncing 
-                  ? Icons.sync 
-                  : status.state == SyncState.error
-                    ? Icons.sync_problem
-                    : status.state == SyncState.offline
-                      ? Icons.cloud_off
-                      : Icons.cloud_done,
-                color: status.state == SyncState.error 
-                  ? Colors.red
-                  : status.state == SyncState.offline
-                    ? Colors.orange
-                    : null,
+                Icons.cloud_sync,
+                color: currentUser != null ? Colors.green : null,
               ),
-              title: Text(_getSyncStatusText(status.state)),
-              subtitle: status.message != null 
-                ? Text(status.message!)
-                : Text('Letzte Sync: ${_formatLastSync(status.lastSync)}'),
-              trailing: status.pendingChanges > 0
-                ? Chip(
-                    label: Text('${status.pendingChanges} ausstehend'),
-                    backgroundColor: Colors.orange[100],
-                  )
-                : null,
+              title: const Text('Cloud Synchronisation'),
+              subtitle: Text(
+                currentUser != null 
+                  ? 'Aktiv - ${currentUser.email}'
+                  : isFirebaseInitialized 
+                    ? 'Bereit für Aktivierung'
+                    : 'Firebase nicht verfügbar',
+              ),
+              trailing: Switch(
+                value: currentUser != null,
+                onChanged: isFirebaseInitialized ? (value) async {
+                  if (value) {
+                    // Navigate to Cloud Auth Screen
+                    final result = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CloudAuthScreen(
+                          isInitialSetup: true,
+                        ),
+                      ),
+                    );
+                    
+                    if (result == true && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cloud Sync aktiviert'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } else {
+                    // Disable cloud sync
+                    await _disableCloudSync();
+                  }
+                } : null,
+              ),
             ),
-            loading: () => const ListTile(
-              leading: CircularProgressIndicator(),
-              title: Text('Lade Sync-Status...'),
-            ),
-            error: (error, _) => ListTile(
-              leading: const Icon(Icons.error, color: Colors.red),
-              title: Text('Fehler: $error'),
-            ),
+            
+            if (currentUser != null) ...[
+          // Sync Status (temporarily disabled for debugging)
+          const ListTile(
+            leading: Icon(Icons.cloud_done),
+            title: Text('Synchronisiert'),
+            subtitle: Text('Debug: Sync Status temporär deaktiviert'),
           ),
           
           // MFA Settings
@@ -224,8 +207,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Cloud-Konto abmelden'),
             onTap: () => _showSignOutDialog(context),
           ),
-        ],
-      ],
+            ],
+          ],
+        );
+      },
     );
   }
   

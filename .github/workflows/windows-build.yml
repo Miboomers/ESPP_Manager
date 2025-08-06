@@ -1,0 +1,170 @@
+name: Windows Build & Release
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.0'
+        channel: 'stable'
+        
+    - name: Enable Windows Desktop
+      run: flutter config --enable-windows-desktop
+      
+    - name: Install dependencies
+      run: flutter pub get
+      
+    - name: Run Flutter doctor
+      run: flutter doctor -v
+      
+    - name: Build Windows Release
+      run: flutter build windows --release
+      
+    - name: Get version from pubspec
+      id: version
+      shell: powershell
+      run: |
+        $content = Get-Content pubspec.yaml
+        $version = ($content | Select-String "version:").ToString().Split(":")[1].Trim()
+        Write-Output "version=$version" >> $env:GITHUB_OUTPUT
+        Write-Output "Version: $version"
+        
+    - name: Create distribution directory
+      shell: powershell
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        $date = Get-Date -Format "yyyyMMdd_HHmm"
+        $distName = "ESPP_Manager_Windows_v${version}_${date}"
+        Write-Output "DIST_NAME=$distName" >> $env:GITHUB_ENV
+        
+        # Create distribution folder
+        New-Item -ItemType Directory -Path "dist" -Force
+        New-Item -ItemType Directory -Path "dist\$distName" -Force
+        
+        # Copy built application
+        Copy-Item -Path "build\windows\x64\runner\Release\*" -Destination "dist\$distName\" -Recurse -Force
+        
+        # Copy additional files
+        Copy-Item -Path "README.md" -Destination "dist\$distName\" -ErrorAction SilentlyContinue
+        Copy-Item -Path "LICENSE" -Destination "dist\$distName\" -ErrorAction SilentlyContinue
+        
+        # Create installation instructions
+        @"
+# ESPP Manager - Windows Installation
+
+## Installation
+1. Entpacken Sie diese ZIP-Datei
+2. Führen Sie \`espp_manager.exe\` aus
+3. Bei Sicherheitswarnung: "More info" → "Run anyway" wählen
+
+## System Requirements  
+- Windows 10/11 (64-bit)
+- Internet für Cloud Sync (optional)
+
+## Features
+- Employee Stock Purchase Plan Verwaltung
+- Deutsche Steuerberechnungen
+- PDF-Berichte für Finanzamt
+- Cloud Synchronisation (Firebase)
+- AES-256 Verschlüsselung
+
+## Support
+- GitHub: https://github.com/Miboomers/ESPP_Manager
+- Issues: https://github.com/Miboomers/ESPP_Manager/issues
+
+Version: $version
+Build: $date
+"@ | Out-File -FilePath "dist\$distName\INSTALLATION.txt" -Encoding UTF8
+
+        Write-Output "Distribution folder created: $distName"
+        
+    - name: Create ZIP archive
+      shell: powershell  
+      run: |
+        $distName = $env:DIST_NAME
+        cd dist
+        Compress-Archive -Path "$distName\*" -DestinationPath "$distName.zip" -Force
+        Write-Output "Created: $distName.zip"
+        Get-ChildItem "$distName.zip" | Format-List Name, Length
+        
+    - name: Upload Windows Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build-${{ steps.version.outputs.version }}
+        path: dist/*.zip
+        retention-days: 30
+        
+    - name: Create GitHub Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*.zip
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## ESPP Manager Windows Release ${{ github.ref_name }}
+          
+          ### 🆕 Features in this release:
+          - Employee Stock Purchase Plan tracking
+          - German tax calculations (Lohnsteuer + Kapitalertragsteuer)
+          - PDF reports for tax filing
+          - Cloud synchronization across devices
+          - Fidelity CSV import
+          - Multi-platform support (Windows, macOS, iOS)
+          
+          ### 📦 Installation:
+          1. Download the ZIP file below
+          2. Extract to any folder
+          3. Run `essp_manager.exe` 
+          4. For security warning: "More info" → "Run anyway"
+          
+          ### 🔐 Security:
+          - AES-256 encryption for all data
+          - PIN authentication
+          - Firebase cloud sync (optional)
+          
+          ### 📊 System Requirements:
+          - Windows 10/11 (64-bit)  
+          - ~50MB disk space
+          - Internet connection (for cloud sync)
+          
+          ### 📝 Version Info:
+          - Flutter: 3.32.0
+          - Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm") UTC
+          - Commit: ${{ github.sha }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Build Summary
+      if: always()
+      shell: powershell
+      run: |
+        Write-Output "## Build Summary" >> $env:GITHUB_STEP_SUMMARY
+        Write-Output "- **Platform**: Windows x64" >> $env:GITHUB_STEP_SUMMARY  
+        Write-Output "- **Flutter**: 3.32.0" >> $env:GITHUB_STEP_SUMMARY
+        Write-Output "- **Version**: ${{ steps.version.outputs.version }}" >> $env:GITHUB_STEP_SUMMARY
+        Write-Output "- **Status**: ✅ Build successful" >> $env:GITHUB_STEP_SUMMARY
+        Write-Output "- **Artifacts**: Windows ZIP ready for download" >> $env:GITHUB_STEP_SUMMARY
+        
+        if (Test-Path "dist\*.zip") {
+          $zipFile = Get-ChildItem "dist\*.zip" | Select-Object -First 1
+          $sizeGB = [math]::Round($zipFile.Length / 1GB, 2)  
+          $sizeMB = [math]::Round($zipFile.Length / 1MB, 2)
+          Write-Output "- **Package Size**: ${sizeMB} MB" >> $env:GITHUB_STEP_SUMMARY
+          Write-Output "- **Ready for Distribution**: ✅" >> $env:GITHUB_STEP_SUMMARY
+        }

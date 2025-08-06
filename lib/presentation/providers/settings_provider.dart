@@ -37,4 +37,14 @@ class SettingsNotifier extends AsyncNotifier<SettingsModel> {
     const defaultSettings = SettingsModel();
     await updateSettings(defaultSettings);
   }
+
+  Future<void> restoreFromCloud(SettingsModel cloudSettings) async {
+    state = const AsyncValue.loading();
+    try {
+      await repository.saveSettings(cloudSettings);
+      state = AsyncValue.data(cloudSettings);
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
 }

@@ -23,11 +23,12 @@ class _MFASetupScreenState extends ConsumerState<MFASetupScreen> {
         title: const Text('Zwei-Faktor-Authentifizierung'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             const Text(
               'Schützen Sie Ihr Konto mit 2FA',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -66,7 +67,8 @@ class _MFASetupScreenState extends ConsumerState<MFASetupScreen> {
               const SizedBox(height: 16),
               _buildVerificationSection(),
             ],
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -170,21 +172,27 @@ class _MFASetupScreenState extends ConsumerState<MFASetupScreen> {
         const SizedBox(height: 16),
         
         // QR Code Placeholder
-        Container(
-          height: 200,
-          width: 200,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.qr_code, size: 64, color: Colors.grey),
-                SizedBox(height: 8),
-                Text('QR-Code wird geladen...'),
-              ],
+        Center(
+          child: Container(
+            height: 160,
+            width: 160,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.qr_code, size: 48, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'QR-Code wird geladen...',
+                    style: TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -250,39 +258,53 @@ class _MFASetupScreenState extends ConsumerState<MFASetupScreen> {
     try {
       // SMS-Code senden
       await Future.delayed(const Duration(seconds: 2)); // Simulation
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SMS-Code wurde gesendet!')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('SMS-Code wurde gesendet!')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _verifyTOTP() async {
     if (_verificationCode.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte geben Sie einen 6-stelligen Code ein')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bitte geben Sie einen 6-stelligen Code ein')),
+        );
+      }
       return;
     }
     
     setState(() => _isLoading = true);
     try {
       await _mfaService.enableMFA(method: MFAMethod.totp);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('2FA erfolgreich aktiviert!')),
-      );
-      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('2FA erfolgreich aktiviert!')),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -290,15 +312,21 @@ class _MFASetupScreenState extends ConsumerState<MFASetupScreen> {
     setState(() => _isLoading = true);
     try {
       await _mfaService.enableMFA(method: MFAMethod.email);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('E-Mail-Code wurde gesendet!')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('E-Mail-Code wurde gesendet!')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 }

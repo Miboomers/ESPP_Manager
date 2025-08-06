@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/cloud_sync_service.dart';
 import '../../../core/security/mfa_service.dart';
-import '../../../data/repositories/transaction_repository.dart';
-import '../../../data/repositories/settings_repository.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/transactions_provider.dart';
+import '../../providers/settings_provider.dart';
 
 class CloudAuthScreen extends ConsumerStatefulWidget {
   final bool isInitialSetup;
@@ -414,11 +413,31 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
         await _handleRegister();
       }
     } catch (e) {
+      debugPrint('🔥 Firebase Auth Error: $e');
       if (mounted) {
+        String errorMessage = 'Unbekannter Fehler';
+        
+        if (e.toString().contains('email-already-in-use')) {
+          errorMessage = 'Diese E-Mail-Adresse ist bereits registriert';
+        } else if (e.toString().contains('weak-password')) {
+          errorMessage = 'Das Passwort ist zu schwach (min. 6 Zeichen)';
+        } else if (e.toString().contains('invalid-email')) {
+          errorMessage = 'Ungültige E-Mail-Adresse';
+        } else if (e.toString().contains('user-not-found')) {
+          errorMessage = 'Benutzer nicht gefunden';
+        } else if (e.toString().contains('wrong-password')) {
+          errorMessage = 'Falsches Passwort';
+        } else if (e.toString().contains('network-request-failed')) {
+          errorMessage = 'Netzwerkfehler - bitte Internetverbindung prüfen';
+        } else {
+          errorMessage = 'Fehler: ${e.toString()}';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -430,10 +449,12 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
   }
   
   Future<void> _handleLogin() async {
+    debugPrint('🔥 Attempting login for: ${_emailController.text.trim()}');
     final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
+    debugPrint('🔥 Login successful: ${credential.user?.email}');
     
     if (credential.user != null) {
       // Trust device if requested
@@ -452,10 +473,12 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
   }
   
   Future<void> _handleRegister() async {
+    debugPrint('🔥 Attempting registration for: ${_emailController.text.trim()}');
     final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
+    debugPrint('🔥 Registration successful: ${credential.user?.email}');
     
     if (credential.user != null) {
       // Send verification email
@@ -477,22 +500,110 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
   }
   
   Future<void> _initializeCloudSync() async {
-    final cloudService = ref.read(cloudSyncServiceProvider);
-    final transactionRepo = ref.read(transactionRepositoryProvider);
-    final settingsRepo = ref.read(settingsRepositoryProvider);
+    try {
+      debugPrint('🔄 Starting cloud sync initialization...');
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      
+      // Initialize encryption key first
+      await cloudService.initializeForUser('1234'); // TODO: Get actual PIN from secure storage
+      
+      // Check if cloud data exists
+      debugPrint('🔄 Checking for existing cloud data...');
+      
+      try {
+        // Try to download cloud data first
+        final cloudData = await cloudService.downloadAllData();
+        debugPrint('🔄 Found cloud data: ${cloudData.transactions.length} transactions');
+        
+        if (cloudData.transactions.isNotEmpty || cloudData.settings != null) {
+          // Cloud data exists - restore to local
+          debugPrint('📥 Restoring cloud data to local storage...');
+          
+          // Update local providers with cloud data
+          if (cloudData.settings != null) {
+            await ref.read(settingsProvider.notifier).restoreFromCloud(cloudData.settings!);
+            debugPrint('✅ Settings restored from cloud');
+          }
+          
+          if (cloudData.transactions.isNotEmpty) {
+            await ref.read(transactionsProvider.notifier).restoreFromCloud(cloudData.transactions);
+            debugPrint('✅ ${cloudData.transactions.length} transactions restored from cloud');
+          }
+          
+          debugPrint('🔥 Cloud data restoration complete!');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${cloudData.transactions.length} Transaktionen von Cloud wiederhergestellt'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          // No cloud data - upload local data
+          debugPrint('🔄 No cloud data found, uploading local data...');
+          await _uploadLocalDataToCloud(cloudService);
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error checking cloud data: $e');
+        // If we can't access cloud data, try uploading local data
+        await _uploadLocalDataToCloud(cloudService);
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Cloud Sync Initialisierung fehlgeschlagen: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
+      rethrow;
+    }
+  }
+  
+  Future<void> _uploadLocalDataToCloud(CloudSyncService cloudService) async {
+    // Get actual data from providers - use .future to wait for them
+    final transactionsAsync = ref.read(transactionsProvider);
+    final settingsAsync = ref.read(settingsProvider);
     
-    // Get current PIN (from secure storage or prompt user)
-    const pin = '1234'; // TODO: Get actual PIN from secure storage
+    debugPrint('🔄 Getting local transactions and settings...');
     
-    // Get local data
-    final transactions = await transactionRepo.getAllTransactions();
-    final settings = await settingsRepo.getSettings();
-    
-    // Enable cloud sync
-    await cloudService.enableCloudSync(
-      localTransactions: transactions,
-      localSettings: settings,
-      pin: pin,
+    await transactionsAsync.when(
+      data: (transactions) async {
+        debugPrint('🔄 Local transactions loaded: ${transactions.length}');
+        await settingsAsync.when(
+          data: (settings) async {
+            debugPrint('🔄 Local settings loaded, uploading to cloud...');
+            // Initialize cloud sync with real data
+            await cloudService.enableCloudSync(
+              localTransactions: transactions,
+              localSettings: settings,
+              pin: '1234', // TODO: Get actual PIN from secure storage
+            );
+            debugPrint('🔥 Local data upload complete: ${transactions.length} transactions!');
+            
+            if (mounted && transactions.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${transactions.length} lokale Transaktionen in Cloud gespeichert'),
+                  backgroundColor: Colors.blue,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          },
+          loading: () async {
+            debugPrint('⚠️ Settings noch nicht geladen - warten...');
+          },
+          error: (error, stack) async {
+            debugPrint('❌ Settings Fehler: $error');
+          },
+        );
+      },
+      loading: () async {
+        debugPrint('⚠️ Transaktionen noch nicht geladen - warten...');
+      },
+      error: (error, stack) async {
+        debugPrint('❌ Transaktions Fehler: $error');
+      },
     );
   }
   

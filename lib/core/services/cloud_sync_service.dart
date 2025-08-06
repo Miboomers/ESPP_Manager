@@ -122,15 +122,19 @@ class CloudSyncService {
     required String pin,
   }) async {
     try {
+      debugPrint('🔄 enableCloudSync started with ${localTransactions.length} transactions');
       _updateSyncStatus(SyncState.syncing, 'Cloud Sync wird aktiviert...');
       
       await initializeForUser(pin);
+      debugPrint('🔄 User initialized for sync');
       
       // Upload all local data to cloud
       await _uploadAllData(localTransactions, localSettings);
+      debugPrint('🔄 All data uploaded successfully');
       
       _updateSyncStatus(SyncState.idle, 'Cloud Sync aktiviert');
     } catch (e) {
+      debugPrint('❌ enableCloudSync error: $e');
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
     }
@@ -156,6 +160,7 @@ class CloudSyncService {
     List<TransactionModel> transactions,
     SettingsModel settings,
   ) async {
+    debugPrint('🔄 Starting upload: ${transactions.length} transactions, settings');
     final batch = _firestore.batch();
     
     // Upload settings

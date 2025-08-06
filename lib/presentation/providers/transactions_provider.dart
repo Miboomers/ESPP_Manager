@@ -80,4 +80,24 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
     final transactions = state.valueOrNull ?? [];
     return transactions.where((t) => t.isSold).toList();
   }
+
+  Future<void> restoreFromCloud(List<TransactionModel> cloudTransactions) async {
+    state = const AsyncValue.loading();
+    try {
+      // Clear local data first
+      await repository.deleteAllTransactions();
+      
+      // Save all cloud transactions to local storage
+      for (final transaction in cloudTransactions) {
+        await repository.saveTransaction(transaction);
+      }
+      
+      // Match sales with purchases to update lookback data
+      final matchedTransactions = TransactionMatcher.matchSalesWithPurchases(cloudTransactions);
+      
+      state = AsyncValue.data(matchedTransactions);
+    } catch (error, stackTrace) {
+      state = AsyncValue.error(error, stackTrace);
+    }
+  }
 }
