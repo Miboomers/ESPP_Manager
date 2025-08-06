@@ -130,16 +130,11 @@ EOF
 
     - name: Deploy to GitHub Pages (nur bei main branch)
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      run: |
-        cd build/web
-        git init
-        git config user.name "GitHub Actions"
-        git config user.email "actions@github.com"
-        git add .
-        git commit -m "Deploy Web App - $(date +%Y%m%d_%H%M)"
-        git branch -M gh-pages
-        git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-        git push -f origin gh-pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/web
+        force_orphan: true
 
   create-release:
     if: startsWith(github.ref, 'refs/tags/')
