@@ -92,4 +92,29 @@ class EncryptionService {
       await prefs.remove(_ivAlias);
     }
   }
+  
+  // Static methods for cloud encryption with custom key
+  static String encryptWithKey(String plainText, String keyBase64) {
+    final key = Key.fromBase64(keyBase64);
+    final iv = IV.fromSecureRandom(16);
+    final encrypter = Encrypter(AES(key));
+    
+    final encrypted = encrypter.encrypt(plainText, iv: iv);
+    // Include IV in the result for decryption
+    return '${iv.base64}:${encrypted.base64}';
+  }
+  
+  static String decryptWithKey(String encryptedData, String keyBase64) {
+    final parts = encryptedData.split(':');
+    if (parts.length != 2) {
+      throw Exception('Invalid encrypted data format');
+    }
+    
+    final iv = IV.fromBase64(parts[0]);
+    final encrypted = Encrypted.fromBase64(parts[1]);
+    final key = Key.fromBase64(keyBase64);
+    final encrypter = Encrypter(AES(key));
+    
+    return encrypter.decrypt(encrypted, iv: iv);
+  }
 }

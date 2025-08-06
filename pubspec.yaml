@@ -78,6 +78,11 @@ dependencies:
   equatable: ^2.0.5
   crypto: ^3.0.3
   shared_preferences: ^2.2.3
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.0.0
+  cloud_firestore: ^6.0.0
+  connectivity_plus: ^6.1.4
+  device_info_plus: ^11.5.0
 
 dev_dependencies:
   flutter_test:

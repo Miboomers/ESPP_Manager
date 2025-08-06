@@ -1,10 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/security/auth_service.dart';
+import '../../core/services/cloud_sync_service.dart';
 import '../../data/models/settings_model.dart';
 import '../providers/settings_provider.dart';
 import '../providers/stock_price_provider.dart';
 import '../providers/transactions_provider.dart';
+import 'auth/cloud_auth_screen.dart';
+import 'security/trusted_devices_screen.dart';
+import 'security/mfa_setup_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -88,8 +93,237 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           trailing: const Icon(Icons.arrow_forward_ios),
           onTap: () => _showAutoLockDialog(context, settings),
         ),
+        const Divider(height: 1),
+        _buildCloudSyncSection(context, settings),
       ],
     );
+  }
+  
+  Widget _buildCloudSyncSection(BuildContext context, SettingsModel settings) {
+    final cloudService = ref.watch(cloudSyncServiceProvider);
+    final syncStatus = ref.watch(syncStatusProvider);
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    return Column(
+      children: [
+        ListTile(
+          leading: Icon(
+            Icons.cloud_sync,
+            color: currentUser != null ? Colors.green : null,
+          ),
+          title: const Text('Cloud Synchronisation'),
+          subtitle: Text(
+            currentUser != null 
+              ? 'Aktiv - ${currentUser.email}'
+              : 'Nur lokale Speicherung',
+          ),
+          trailing: Switch(
+            value: currentUser != null,
+            onChanged: (value) async {
+              if (value) {
+                // Navigate to Cloud Auth Screen
+                final result = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CloudAuthScreen(
+                      isInitialSetup: true,
+                    ),
+                  ),
+                );
+                
+                if (result == true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Cloud Sync aktiviert'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                // Disable cloud sync
+                await _disableCloudSync();
+              }
+            },
+          ),
+        ),
+        
+        if (currentUser != null) ...[
+          // Sync Status
+          syncStatus.when(
+            data: (status) => ListTile(
+              leading: Icon(
+                status.state == SyncState.syncing 
+                  ? Icons.sync 
+                  : status.state == SyncState.error
+                    ? Icons.sync_problem
+                    : status.state == SyncState.offline
+                      ? Icons.cloud_off
+                      : Icons.cloud_done,
+                color: status.state == SyncState.error 
+                  ? Colors.red
+                  : status.state == SyncState.offline
+                    ? Colors.orange
+                    : null,
+              ),
+              title: Text(_getSyncStatusText(status.state)),
+              subtitle: status.message != null 
+                ? Text(status.message!)
+                : Text('Letzte Sync: ${_formatLastSync(status.lastSync)}'),
+              trailing: status.pendingChanges > 0
+                ? Chip(
+                    label: Text('${status.pendingChanges} ausstehend'),
+                    backgroundColor: Colors.orange[100],
+                  )
+                : null,
+            ),
+            loading: () => const ListTile(
+              leading: CircularProgressIndicator(),
+              title: Text('Lade Sync-Status...'),
+            ),
+            error: (error, _) => ListTile(
+              leading: const Icon(Icons.error, color: Colors.red),
+              title: Text('Fehler: $error'),
+            ),
+          ),
+          
+          // MFA Settings
+          ListTile(
+            leading: const Icon(Icons.security),
+            title: const Text('Zwei-Faktor-Authentifizierung'),
+            subtitle: const Text('Zusätzliche Sicherheit für Ihr Konto'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MFASetupScreen(),
+                ),
+              );
+            },
+          ),
+          
+          // Trusted Devices
+          ListTile(
+            leading: const Icon(Icons.devices),
+            title: const Text('Vertrauenswürdige Geräte'),
+            subtitle: const Text('Geräte verwalten, die ohne MFA zugreifen'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TrustedDevicesScreen(),
+                ),
+              );
+            },
+          ),
+          
+          // Sign Out
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Cloud-Konto abmelden'),
+            onTap: () => _showSignOutDialog(context),
+          ),
+        ],
+      ],
+    );
+  }
+  
+  String _getSyncStatusText(SyncState state) {
+    switch (state) {
+      case SyncState.idle:
+        return 'Synchronisiert';
+      case SyncState.syncing:
+        return 'Synchronisiere...';
+      case SyncState.error:
+        return 'Sync-Fehler';
+      case SyncState.offline:
+        return 'Offline - wartet auf Verbindung';
+    }
+  }
+  
+  String _formatLastSync(DateTime lastSync) {
+    final difference = DateTime.now().difference(lastSync);
+    if (difference.inMinutes < 1) {
+      return 'Gerade eben';
+    } else if (difference.inHours < 1) {
+      return 'Vor ${difference.inMinutes} Min.';
+    } else if (difference.inDays < 1) {
+      return 'Vor ${difference.inHours} Std.';
+    } else {
+      return 'Vor ${difference.inDays} Tagen';
+    }
+  }
+  
+  Future<void> _disableCloudSync() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cloud Sync deaktivieren?'),
+        content: const Text(
+          'Ihre Daten bleiben lokal gespeichert, werden aber nicht mehr zwischen Geräten synchronisiert.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Deaktivieren'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await FirebaseAuth.instance.signOut();
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      await cloudService.disableCloudSync();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cloud Sync deaktiviert'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _showSignOutDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Von Cloud abmelden?'),
+        content: const Text(
+          'Sie können sich jederzeit wieder anmelden, um Ihre Daten zu synchronisieren.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Abmelden'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erfolgreich abgemeldet')),
+        );
+      }
+    }
   }
 
   Widget _buildDefaultsSection(BuildContext context, SettingsModel settings) {

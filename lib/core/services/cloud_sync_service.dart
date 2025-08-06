@@ -1,0 +1,452 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../data/models/transaction_model.dart';
+import '../../data/models/settings_model.dart';
+import '../security/encryption_service.dart';
+
+// Provider für Cloud Sync Service
+final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
+  return CloudSyncService();
+});
+
+// Provider für Sync Status
+final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
+  final service = ref.watch(cloudSyncServiceProvider);
+  return service.syncStatusStream;
+});
+
+enum SyncState {
+  idle,
+  syncing,
+  error,
+  offline,
+}
+
+class SyncStatus {
+  final SyncState state;
+  final String? message;
+  final DateTime lastSync;
+  final int pendingChanges;
+
+  SyncStatus({
+    required this.state,
+    this.message,
+    required this.lastSync,
+    this.pendingChanges = 0,
+  });
+}
+
+class CloudSyncService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final Connectivity _connectivity = Connectivity();
+  
+  // Sync Status Stream
+  final _syncStatusController = StreamController<SyncStatus>.broadcast();
+  Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
+  
+  // Offline Queue
+  final List<PendingChange> _pendingChanges = [];
+  
+  // Current sync status
+  SyncStatus _currentStatus = SyncStatus(
+    state: SyncState.idle,
+    lastSync: DateTime.now(),
+  );
+  
+  // Encryption key for cloud data
+  String? _cloudEncryptionKey;
+  
+  // User specific paths
+  String get _userPath => 'users/${_auth.currentUser?.uid}';
+  
+  CloudSyncService() {
+    _initializeConnectivityListener();
+  }
+  
+  void _initializeConnectivityListener() {
+    _connectivity.onConnectivityChanged.listen((result) {
+      if (result.contains(ConnectivityResult.none)) {
+        _updateSyncStatus(SyncState.offline, 'Keine Internetverbindung');
+      } else if (_pendingChanges.isNotEmpty) {
+        // Automatisch synchronisieren wenn wieder online
+        syncPendingChanges();
+      }
+    });
+  }
+  
+  // Initialize cloud sync for user
+  Future<void> initializeForUser(String pin) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Nicht angemeldet');
+    
+    // Generate user-specific encryption key from PIN + Salt
+    final salt = user.uid;
+    final bytes = utf8.encode('$pin:$salt');
+    final hash = sha256.convert(bytes);
+    _cloudEncryptionKey = base64.encode(hash.bytes);
+    
+    // Store key securely
+    await _secureStorage.write(
+      key: 'cloud_encryption_key_${user.uid}',
+      value: _cloudEncryptionKey,
+    );
+    
+    debugPrint('✅ Cloud Sync für User initialisiert');
+  }
+  
+  // Check if cloud sync is enabled
+  Future<bool> isCloudSyncEnabled() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    
+    _cloudEncryptionKey ??= await _secureStorage.read(
+      key: 'cloud_encryption_key_${user.uid}',
+    );
+    
+    return _cloudEncryptionKey != null;
+  }
+  
+  // Enable cloud sync (first time)
+  Future<void> enableCloudSync({
+    required List<TransactionModel> localTransactions,
+    required SettingsModel localSettings,
+    required String pin,
+  }) async {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'Cloud Sync wird aktiviert...');
+      
+      await initializeForUser(pin);
+      
+      // Upload all local data to cloud
+      await _uploadAllData(localTransactions, localSettings);
+      
+      _updateSyncStatus(SyncState.idle, 'Cloud Sync aktiviert');
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Fehler: $e');
+      rethrow;
+    }
+  }
+  
+  // Disable cloud sync
+  Future<void> disableCloudSync() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    
+    // Clear encryption key
+    await _secureStorage.delete(key: 'cloud_encryption_key_${user.uid}');
+    _cloudEncryptionKey = null;
+    
+    // Optional: Delete cloud data
+    // await _deleteAllCloudData();
+    
+    _updateSyncStatus(SyncState.idle, 'Cloud Sync deaktiviert');
+  }
+  
+  // Upload all data (initial sync)
+  Future<void> _uploadAllData(
+    List<TransactionModel> transactions,
+    SettingsModel settings,
+  ) async {
+    final batch = _firestore.batch();
+    
+    // Upload settings
+    final settingsRef = _firestore.doc('$_userPath/data/settings');
+    batch.set(settingsRef, {
+      'data': _encryptData(settings.toJson()),
+      'type': 'settings',
+      'lastModified': FieldValue.serverTimestamp(),
+    });
+    
+    // Upload transactions
+    for (final transaction in transactions) {
+      final transRef = _firestore.doc('$_userPath/transactions/${transaction.id}');
+      batch.set(transRef, {
+        'data': _encryptData(transaction.toJson()),
+        'type': 'transaction',
+        'lastModified': FieldValue.serverTimestamp(),
+        'deleted': false,
+      });
+    }
+    
+    await batch.commit();
+    debugPrint('✅ ${transactions.length} Transaktionen hochgeladen');
+  }
+  
+  // Download all data (restore or new device)
+  Future<({List<TransactionModel> transactions, SettingsModel? settings})> 
+      downloadAllData() async {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'Daten werden geladen...');
+      
+      // Download settings
+      SettingsModel? settings;
+      final settingsDoc = await _firestore
+          .doc('$_userPath/data/settings')
+          .get();
+      
+      if (settingsDoc.exists) {
+        final data = settingsDoc.data()!;
+        final decrypted = _decryptData(data['data']);
+        settings = SettingsModel.fromJson(decrypted);
+      }
+      
+      // Download transactions
+      final transSnapshot = await _firestore
+          .collection('$_userPath/transactions')
+          .where('deleted', isEqualTo: false)
+          .get();
+      
+      final transactions = transSnapshot.docs.map((doc) {
+        final data = doc.data();
+        final decrypted = _decryptData(data['data']);
+        return TransactionModel.fromJson(decrypted);
+      }).toList();
+      
+      _updateSyncStatus(SyncState.idle, 'Sync abgeschlossen');
+      
+      return (transactions: transactions, settings: settings);
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Download fehlgeschlagen: $e');
+      rethrow;
+    }
+  }
+  
+  // Sync single transaction
+  Future<void> syncTransaction(TransactionModel transaction, {bool deleted = false}) async {
+    if (!await isCloudSyncEnabled()) return;
+    
+    // Check connectivity
+    final connectivityResult = await _connectivity.checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      // Add to offline queue
+      _pendingChanges.add(PendingChange(
+        id: transaction.id,
+        type: ChangeType.transaction,
+        data: transaction.toJson(),
+        deleted: deleted,
+        timestamp: DateTime.now(),
+      ));
+      _updateSyncStatus(SyncState.offline, null);
+      return;
+    }
+    
+    try {
+      final docRef = _firestore.doc('$_userPath/transactions/${transaction.id}');
+      
+      if (deleted) {
+        // Soft delete
+        await docRef.update({
+          'deleted': true,
+          'deletedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Create or update
+        await docRef.set({
+          'data': _encryptData(transaction.toJson()),
+          'type': 'transaction',
+          'lastModified': FieldValue.serverTimestamp(),
+          'deleted': false,
+        });
+      }
+      
+      debugPrint('✅ Transaction ${transaction.id} synchronisiert');
+    } catch (e) {
+      // Add to offline queue on error
+      _pendingChanges.add(PendingChange(
+        id: transaction.id,
+        type: ChangeType.transaction,
+        data: transaction.toJson(),
+        deleted: deleted,
+        timestamp: DateTime.now(),
+      ));
+      debugPrint('❌ Sync fehlgeschlagen, zur Queue hinzugefügt: $e');
+    }
+  }
+  
+  // Sync settings
+  Future<void> syncSettings(SettingsModel settings) async {
+    if (!await isCloudSyncEnabled()) return;
+    
+    // Check connectivity
+    final connectivityResult = await _connectivity.checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      _pendingChanges.add(PendingChange(
+        id: 'settings',
+        type: ChangeType.settings,
+        data: settings.toJson(),
+        deleted: false,
+        timestamp: DateTime.now(),
+      ));
+      _updateSyncStatus(SyncState.offline, null);
+      return;
+    }
+    
+    try {
+      await _firestore.doc('$_userPath/data/settings').set({
+        'data': _encryptData(settings.toJson()),
+        'type': 'settings',
+        'lastModified': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('✅ Settings synchronisiert');
+    } catch (e) {
+      _pendingChanges.add(PendingChange(
+        id: 'settings',
+        type: ChangeType.settings,
+        data: settings.toJson(),
+        deleted: false,
+        timestamp: DateTime.now(),
+      ));
+      debugPrint('❌ Settings sync fehlgeschlagen: $e');
+    }
+  }
+  
+  // Sync pending changes when back online
+  Future<void> syncPendingChanges() async {
+    if (_pendingChanges.isEmpty) return;
+    
+    _updateSyncStatus(
+      SyncState.syncing,
+      '${_pendingChanges.length} ausstehende Änderungen...',
+    );
+    
+    final batch = _firestore.batch();
+    final processedChanges = <PendingChange>[];
+    
+    for (final change in _pendingChanges) {
+      try {
+        if (change.type == ChangeType.transaction) {
+          final docRef = _firestore.doc('$_userPath/transactions/${change.id}');
+          
+          if (change.deleted) {
+            batch.update(docRef, {
+              'deleted': true,
+              'deletedAt': Timestamp.fromDate(change.timestamp),
+            });
+          } else {
+            batch.set(docRef, {
+              'data': _encryptData(change.data),
+              'type': 'transaction',
+              'lastModified': Timestamp.fromDate(change.timestamp),
+              'deleted': false,
+            });
+          }
+        } else if (change.type == ChangeType.settings) {
+          final docRef = _firestore.doc('$_userPath/data/settings');
+          batch.set(docRef, {
+            'data': _encryptData(change.data),
+            'type': 'settings',
+            'lastModified': Timestamp.fromDate(change.timestamp),
+          });
+        }
+        
+        processedChanges.add(change);
+      } catch (e) {
+        debugPrint('❌ Fehler beim Verarbeiten von Change ${change.id}: $e');
+      }
+    }
+    
+    if (processedChanges.isNotEmpty) {
+      try {
+        await batch.commit();
+        
+        // Remove processed changes
+        for (final change in processedChanges) {
+          _pendingChanges.remove(change);
+        }
+        
+        debugPrint('✅ ${processedChanges.length} Änderungen synchronisiert');
+        _updateSyncStatus(SyncState.idle, 'Sync abgeschlossen');
+      } catch (e) {
+        debugPrint('❌ Batch commit fehlgeschlagen: $e');
+        _updateSyncStatus(SyncState.error, 'Sync fehlgeschlagen');
+      }
+    }
+  }
+  
+  // Real-time sync listener
+  Stream<List<TransactionModel>> watchTransactions() {
+    if (_auth.currentUser == null) {
+      return Stream.value([]);
+    }
+    
+    return _firestore
+        .collection('$_userPath/transactions')
+        .where('deleted', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final decrypted = _decryptData(data['data']);
+        return TransactionModel.fromJson(decrypted);
+      }).toList();
+    });
+  }
+  
+  // Encryption helpers
+  String _encryptData(Map<String, dynamic> data) {
+    if (_cloudEncryptionKey == null) {
+      throw Exception('Encryption key nicht initialisiert');
+    }
+    
+    final jsonString = jsonEncode(data);
+    final encrypted = EncryptionService.encryptWithKey(jsonString, _cloudEncryptionKey!);
+    return encrypted;
+  }
+  
+  Map<String, dynamic> _decryptData(String encryptedData) {
+    if (_cloudEncryptionKey == null) {
+      throw Exception('Encryption key nicht initialisiert');
+    }
+    
+    final decrypted = EncryptionService.decryptWithKey(encryptedData, _cloudEncryptionKey!);
+    return jsonDecode(decrypted) as Map<String, dynamic>;
+  }
+  
+  // Update sync status
+  void _updateSyncStatus(SyncState state, String? message) {
+    _currentStatus = SyncStatus(
+      state: state,
+      message: message,
+      lastSync: state == SyncState.idle ? DateTime.now() : _currentStatus.lastSync,
+      pendingChanges: _pendingChanges.length,
+    );
+    _syncStatusController.add(_currentStatus);
+  }
+  
+  // Cleanup
+  void dispose() {
+    _syncStatusController.close();
+  }
+}
+
+// Pending change model
+class PendingChange {
+  final String id;
+  final ChangeType type;
+  final Map<String, dynamic> data;
+  final bool deleted;
+  final DateTime timestamp;
+
+  PendingChange({
+    required this.id,
+    required this.type,
+    required this.data,
+    required this.deleted,
+    required this.timestamp,
+  });
+}
+
+enum ChangeType {
+  transaction,
+  settings,
+}

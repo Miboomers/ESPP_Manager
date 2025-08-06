@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'core/security/encryption_service.dart';
 import 'core/security/secure_storage_service.dart';
+import 'core/services/firebase_init_service.dart';
 import 'data/models/transaction_model.dart';
 import 'data/models/settings_model.dart';
 import 'data/repositories/stock_cache_repository.dart';
@@ -21,6 +22,9 @@ import 'presentation/screens/import_lookback_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase (optional - app works without it)
+  await FirebaseInitService.initialize();
   
   // Initialize Hive
   await Hive.initFlutter();
