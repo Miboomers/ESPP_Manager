@@ -63,32 +63,34 @@ jobs:
         Copy-Item -Path "LICENSE" -Destination "dist\$distName\" -ErrorAction SilentlyContinue
         
         # Create installation instructions
-        @"
-# ESPP Manager - Windows Installation
+        $instructions = @"
+ESPP Manager - Windows Installation
+====================================
 
-## Installation
+Installation:
 1. Entpacken Sie diese ZIP-Datei
-2. Führen Sie \`espp_manager.exe\` aus
+2. Führen Sie espp_manager.exe aus
 3. Bei Sicherheitswarnung: "More info" → "Run anyway" wählen
 
-## System Requirements  
+System Requirements:
 - Windows 10/11 (64-bit)
 - Internet für Cloud Sync (optional)
 
-## Features
+Features:
 - Employee Stock Purchase Plan Verwaltung
 - Deutsche Steuerberechnungen
 - PDF-Berichte für Finanzamt
 - Cloud Synchronisation (Firebase)
 - AES-256 Verschlüsselung
 
-## Support
+Support:
 - GitHub: https://github.com/Miboomers/ESPP_Manager
 - Issues: https://github.com/Miboomers/ESPP_Manager/issues
 
 Version: $version
 Build: $date
-"@ | Out-File -FilePath "dist\$distName\INSTALLATION.txt" -Encoding UTF8
+"@
+        $instructions | Out-File -FilePath "dist\$distName\INSTALLATION.txt" -Encoding UTF8
 
         Write-Output "Distribution folder created: $distName"
         
@@ -128,7 +130,7 @@ Build: $date
           ### 📦 Installation:
           1. Download the ZIP file below
           2. Extract to any folder
-          3. Run `essp_manager.exe` 
+          3. Run espp_manager.exe
           4. For security warning: "More info" → "Run anyway"
           
           ### 🔐 Security:

@@ -41,7 +41,7 @@ jobs:
         Copy-Item -Path "build\windows\x64\runner\Release" -Destination "dist\$distName" -Recurse
         
         # Einfache README
-        @"
+        $readme = @"
 ESPP Manager für Windows
 ========================
 
@@ -49,7 +49,8 @@ Start: espp_manager.exe ausführen
 Bei Sicherheitswarnung: "Weitere Informationen" → "Trotzdem ausführen"
 
 Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
-"@ | Out-File -FilePath "dist\$distName\README.txt" -Encoding UTF8
+"@
+        $readme | Out-File -FilePath "dist\$distName\README.txt" -Encoding UTF8
 
         Compress-Archive -Path "dist\$distName" -DestinationPath "dist\$distName.zip"
         
@@ -90,22 +91,22 @@ Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
         cp -r build/web "dist/$DIST_NAME"
         
         # Index.html Anpassungen für Firebase Hosting
-        cat > "dist/$DIST_NAME/firebase-hosting.md" << EOF
+        cat > "dist/$DIST_NAME/firebase-hosting.md" << 'EOF'
 # Web Deployment Instructions
 
 ## Local Testing:
-\`\`\`bash
+```bash
 cd $DIST_NAME
 python3 -m http.server 8000
 # Öffnen: http://localhost:8000
-\`\`\`
+```
 
 ## Firebase Hosting Deployment:
-\`\`\`bash
+```bash
 npm install -g firebase-tools
 firebase init hosting
 firebase deploy
-\`\`\`
+```
 
 ## GitHub Pages Deployment:
 1. Push this folder to gh-pages branch
