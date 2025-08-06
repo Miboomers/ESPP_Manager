@@ -1,5 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+// Try to import private config, fall back to example if not exists
+import '../../config/firebase_config.dart' if (dart.library.html) '../../config/firebase_config.dart';
 
 class FirebaseInitService {
   static bool _initialized = false;
@@ -8,29 +10,28 @@ class FirebaseInitService {
     if (_initialized) return;
     
     try {
-      // Firebase Options für verschiedene Plattformen
-      const firebaseOptions = FirebaseOptions(
-        // Diese Werte kommen aus der Firebase Console
-        // Projekt: ESPP Manager
-        apiKey: 'AIzaSyDummy-Key-Replace-With-Real', 
-        appId: '1:123456789:ios:abcdef',
-        messagingSenderId: '123456789',
-        projectId: 'espp-manager',
-        storageBucket: 'espp-manager.appspot.com',
-        
-        // iOS specific
-        iosBundleId: 'com.miboomers.esppmanager',
-        
-        // Android specific  
-        androidClientId: 'android-client-id',
-      );
+      // Use platform-specific Firebase options from config file
+      FirebaseOptions firebaseOptions;
       
-      await Firebase.initializeApp(
-        options: firebaseOptions,
-      );
+      if (kIsWeb) {
+        firebaseOptions = FirebaseConfig.web;
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        firebaseOptions = FirebaseConfig.ios;
+      } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+        firebaseOptions = FirebaseConfig.macos;
+      } else if (defaultTargetPlatform == TargetPlatform.windows) {
+        firebaseOptions = FirebaseConfig.windows;
+      } else {
+        throw UnsupportedError('Unsupported platform');
+      }
+      
+      await Firebase.initializeApp(options: firebaseOptions);
+      
+      // setPersistence is only supported on web platforms
+      // macOS handles persistence automatically
       
       _initialized = true;
-      debugPrint('✅ Firebase erfolgreich initialisiert');
+      debugPrint('✅ Firebase erfolgreich initialisiert für Projekt: espp-manager');
     } catch (e) {
       debugPrint('❌ Firebase Initialisierung fehlgeschlagen: $e');
       // App funktioniert weiter im Offline-Modus

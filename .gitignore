@@ -43,3 +43,21 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase Configuration Files - KEEP PRIVATE!
+**/GoogleService-Info.plist
+**/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+android/app/google-services.json
+
+# Environment files with secrets
+.env
+.env.*
+lib/config/firebase_config.dart
+
+# Apple Developer certificates
+*.p12
+*.p8
+*.mobileprovision
+*.cer
