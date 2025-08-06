@@ -1,7 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-// Try to import private config, fall back to example if not exists
-import '../../config/firebase_config.dart' if (dart.library.html) '../../config/firebase_config.dart';
+import 'dart:io';
+
+// Import real config, fallback to stub for CI/CD builds
+import '../../config/firebase_config.dart' as firebase_config;
 
 class FirebaseInitService {
   static bool _initialized = false;
@@ -10,20 +12,25 @@ class FirebaseInitService {
     if (_initialized) return;
     
     try {
-      // Use platform-specific Firebase options from config file
+      // Use platform-specific Firebase options
       FirebaseOptions firebaseOptions;
       
+      // Use Firebase config (real config will override stub if present)
       if (kIsWeb) {
-        firebaseOptions = FirebaseConfig.web;
+        firebaseOptions = firebase_config.FirebaseConfig.web;
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-        firebaseOptions = FirebaseConfig.ios;
+        firebaseOptions = firebase_config.FirebaseConfig.ios;
       } else if (defaultTargetPlatform == TargetPlatform.macOS) {
-        firebaseOptions = FirebaseConfig.macos;
+        firebaseOptions = firebase_config.FirebaseConfig.macos;
       } else if (defaultTargetPlatform == TargetPlatform.windows) {
-        firebaseOptions = FirebaseConfig.windows;
+        firebaseOptions = firebase_config.FirebaseConfig.windows;
       } else {
         throw UnsupportedError('Unsupported platform');
       }
+      
+      // Check if we're using real config or stub
+      final isRealConfig = await _hasRealFirebaseConfig();
+      debugPrint(isRealConfig ? '✅ Using real Firebase config' : '🔧 Using stub Firebase config (CI/CD build)');
       
       await Firebase.initializeApp(options: firebaseOptions);
       
@@ -40,4 +47,24 @@ class FirebaseInitService {
   }
   
   static bool get isInitialized => _initialized;
+
+  // Check if real Firebase config is available
+  static Future<bool> _hasRealFirebaseConfig() async {
+    try {
+      // Check if the real config file exists
+      final configFile = File('lib/config/firebase_config.dart');
+      final exists = await configFile.exists();
+      
+      if (exists) {
+        // Also check if it contains real API keys (not demo keys)
+        final content = await configFile.readAsString();
+        final hasRealKeys = !content.contains('demo-api-key-for-ci-builds');
+        return hasRealKeys;
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
 }

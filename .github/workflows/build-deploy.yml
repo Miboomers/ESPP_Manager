@@ -25,6 +25,13 @@ jobs:
     - name: Enable Windows Desktop
       run: flutter config --enable-windows-desktop
       
+    - name: Setup Firebase config for CI/CD
+      shell: powershell
+      run: |
+        # Use stub config for CI/CD builds
+        Copy-Item -Path "lib\config\firebase_config_stub.dart" -Destination "lib\config\firebase_config.dart" -Force
+        Write-Host "✅ Using stub Firebase config for CI/CD build"
+        
     - name: Install dependencies
       run: flutter pub get
       
@@ -74,13 +81,19 @@ Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
         flutter-version: '3.32.0'
         channel: 'stable'
         
+    - name: Setup Firebase config for CI/CD
+      run: |
+        # Use stub config for CI/CD builds
+        cp lib/config/firebase_config_stub.dart lib/config/firebase_config.dart
+        echo "✅ Using stub Firebase config for CI/CD build"
+        
     - name: Enable Web & Install dependencies
       run: |
         flutter config --enable-web
         flutter pub get
         
     - name: Build Web Release
-      run: flutter build web --release --web-renderer html --base-href /
+      run: flutter build web --release --base-href /
       
     - name: Package Web Build
       run: |

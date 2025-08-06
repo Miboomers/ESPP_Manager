@@ -341,5 +341,61 @@ columnWidths: {
 - **Workaround**: Nutzer muss "More info" → "Run anyway" klicken
 - **Alternative**: GitHub als vertrauenswürdige Download-Quelle nutzen
 
+## 🆕 CLOUD SYNC UI FIXES (v1.9 - 2025-08-06):
+
+### ✅ Reaktiver Cloud Sync Toggle implementiert:
+
+#### 🔧 Problem gelöst:
+- **Vorher**: Toggle UI wurde nicht sofort aktualisiert nach An-/Abmelden
+- **Lösung**: StreamBuilder für reaktive Firebase Auth State Changes
+
+#### 💻 Technische Implementierung:
+```dart
+// settings_screen.dart - Zeile 113-119
+return StreamBuilder<User?>(
+  stream: FirebaseAuth.instance.authStateChanges(),
+  builder: (context, snapshot) {
+    final currentUser = snapshot.data;
+    debugPrint('🔥 Cloud Sync Toggle: currentUser=$currentUser');
+    // UI wird automatisch bei Auth-Änderungen aktualisiert
+  }
+);
+```
+
+#### 🎯 Benutzer-Experience:
+- **Toggle reagiert sofort** beim An-/Abmelden
+- **Email wird live angezeigt** im Untertitel
+- **Grünes Icon** bei aktiver Cloud-Verbindung
+- **Smooth UX** ohne Neuladen der Settings
+
+### ✅ Build Warnings drastisch reduziert:
+
+#### 📦 Podfile Deployment Target Fix:
+```ruby
+# macos/Podfile - Automatische Korrektur aller Pods
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      if config.build_settings['MACOSX_DEPLOYMENT_TARGET'].to_f < 11.0
+        config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+      end
+    end
+  end
+end
+```
+
+#### 🔌 Plugin Updates:
+- `open_file: ^3.5.10` (macOS Deprecated API Fixes)
+
+#### ⚠️ Verbleibende Warnings (normal):
+- Firebase SDK Deprecations (Upstream-Issue)
+- gRPC zlib OS_CODE conflicts (Internal Libraries)
+- CocoaPods DART_DEFINES (Cosmetic)
+
+### 🚀 Multi-Platform Readiness:
+- **macOS**: ✅ Production-ready mit allen Fixes
+- **iOS**: 🔄 Code-ready, braucht nur GoogleService-Info.plist
+- **Windows**: 🔄 GitHub Actions ready für automatische Builds
+
 ---
-*Status: 🚀 MULTI-PLATFORM RELEASE v1.8 - 2025-08-05*
+*Status: 🎯 CLOUD SYNC FIXES COMPLETE v1.9 - 2025-08-06*

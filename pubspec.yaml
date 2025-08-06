@@ -62,7 +62,7 @@ dependencies:
   # File Sharing
   share_plus: ^11.0.0
   path_provider: ^2.1.4
-  open_file: ^3.5.9
+  open_file: ^3.5.10
   file_picker: ^8.1.6
   csv: ^6.0.0
   
@@ -78,6 +78,8 @@ dependencies:
   equatable: ^2.0.5
   crypto: ^3.0.3
   shared_preferences: ^2.2.3
+  
+  # Firebase Dependencies
   firebase_core: ^4.0.0
   firebase_auth: ^6.0.0
   cloud_firestore: ^6.0.0
