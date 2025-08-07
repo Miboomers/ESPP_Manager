@@ -48,17 +48,9 @@ jobs:
         New-Item -ItemType Directory -Path "dist" -Force
         Copy-Item -Path "build\windows\x64\runner\Release" -Destination "dist\$distName" -Recurse
         
-        # Einfache README
-        $readme = @"
-ESPP Manager für Windows
-========================
-
-Start: espp_manager.exe ausführen
-Bei Sicherheitswarnung: "Weitere Informationen" → "Trotzdem ausführen"
-
-Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
-"@
-        $readme | Out-File -FilePath "dist\$distName\README.txt" -Encoding UTF8
+        # Einfache README erstellen
+        $readmeContent = "ESPP Manager für Windows`n========================`n`nStart: espp_manager.exe ausführen`nBei Sicherheitswarnung: 'Weitere Informationen' → 'Trotzdem ausführen'`n`nCloud Sync und alle Features funktionieren wie auf macOS/iOS."
+        $readmeContent | Out-File -FilePath "dist\$distName\README.txt" -Encoding UTF8
 
         Compress-Archive -Path "dist\$distName" -DestinationPath "dist\$distName.zip"
         
@@ -105,35 +97,15 @@ Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
         mkdir -p dist
         cp -r build/web "dist/$DIST_NAME"
         
-        # Index.html Anpassungen für Firebase Hosting
-        cat > "dist/$DIST_NAME/firebase-hosting.md" << 'EOF'
-# Web Deployment Instructions
-
-## Local Testing:
-```bash
-cd $DIST_NAME
-python3 -m http.server 8000
-# Öffnen: http://localhost:8000
-```
-
-## Firebase Hosting Deployment:
-```bash
-npm install -g firebase-tools
-firebase init hosting
-firebase deploy
-```
-
-## GitHub Pages Deployment:
-1. Push this folder to gh-pages branch
-2. Enable GitHub Pages in repo settings
-3. Access at: https://[username].github.io/ESPP_Manager
-
-Features:
-✅ Läuft komplett im Browser
-✅ Cloud Sync mit Firebase
-✅ Offline-fähig mit IndexedDB
-✅ Plattformunabhängig
-EOF
+        # Create deployment instructions
+        echo "# Web Deployment Instructions" > "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "## Local Testing:" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "1. cd DIST_NAME" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "2. python3 -m http.server 8000" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "3. Open: http://localhost:8000" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "" >> "dist/$DIST_NAME/DEPLOYMENT.md"
+        echo "Features: Web App läuft komplett im Browser mit Cloud Sync" >> "dist/$DIST_NAME/DEPLOYMENT.md"
         
         cd dist && zip -r "$DIST_NAME.zip" "$DIST_NAME"
         
