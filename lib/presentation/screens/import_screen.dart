@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'dart:io';
-import 'dart:convert';
+import '../../core/services/file_service.dart';
 import '../../data/models/transaction_model.dart';
 import '../providers/transactions_provider.dart';
 import '../providers/settings_provider.dart';
@@ -22,7 +23,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   bool _isImporting = false;
   String _status = '';
   List<String> _logs = [];
-  List<File> _selectedFiles = [];
+  List<dynamic> _selectedFiles = []; // Can be File or PlatformFile
   // bool _isClosedPositions = true; // Nicht mehr benötigt - automatische Erkennung
   
   // Statistiken
@@ -101,18 +102,25 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         type: FileType.custom,
         allowedExtensions: ['csv'],
         allowMultiple: true,
-        withData: true,
+        withData: true, // Important for web
       );
 
       if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _selectedFiles = result.files
-              .where((file) => file.path != null)
-              .map((file) => File(file.path!))
-              .toList();
+          if (kIsWeb) {
+            // On Web, work with PlatformFile directly
+            _selectedFiles = result.files.cast<dynamic>();
+          } else {
+            // On Desktop/Mobile, convert to File objects
+            _selectedFiles = result.files
+                .where((file) => file.path != null)
+                .map((file) => File(file.path!))
+                .cast<dynamic>()
+                .toList();
+          }
           
           if (_selectedFiles.length == 1) {
-            _status = 'Datei ausgewählt: ${result.files.first.name}';
+            _status = 'Datei ausgewählt: ${FileService.getFileName(_selectedFiles.first)}';
           } else {
             _status = '${_selectedFiles.length} Dateien ausgewählt';
           }
@@ -162,9 +170,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       // Verarbeite jede ausgewählte Datei
       for (final file in _selectedFiles) {
         _logs.add('');
-        _logs.add('📄 Verarbeite Datei: ${file.path.split('/').last}');
+        _logs.add('📄 Verarbeite Datei: ${FileService.getFileName(file)}');
         
-        final input = await file.readAsString(encoding: utf8);
+        final input = await FileService.readFileAsString(file);
         
         // Remove BOM if present
         final cleanInput = input.startsWith('\ufeff') ? input.substring(1) : input;
@@ -800,7 +808,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       _selectedFiles.isEmpty
                           ? 'Keine Dateien ausgewählt'
                           : _selectedFiles.length == 1
-                              ? 'Datei: ${_selectedFiles.first.path.split('/').last}'
+                              ? 'Datei: ${FileService.getFileName(_selectedFiles.first)}'
                               : '${_selectedFiles.length} Dateien ausgewählt',
                       style: const TextStyle(fontSize: 14),
                       textAlign: TextAlign.center,
@@ -808,7 +816,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     if (_selectedFiles.length > 1) ...[
                       const SizedBox(height: 8),
                       ...(_selectedFiles.map((file) => Text(
-                        '• ${file.path.split('/').last}',
+                        '• ${FileService.getFileName(file)}',
                         style: const TextStyle(fontSize: 12),
                       ))),
                     ],
