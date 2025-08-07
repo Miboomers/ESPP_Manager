@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 class FirebaseConfig {
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_FIREBASE_API_KEY_HERE',
+    apiKey: 'YOUR_FIREBASE_WEB_API_KEY_HERE',
     appId: 'YOUR_WEB_APP_ID',
     messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
@@ -14,7 +14,7 @@ class FirebaseConfig {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_FIREBASE_API_KEY_HERE',
+    apiKey: 'YOUR_FIREBASE_WEB_API_KEY_HERE',
     appId: 'YOUR_IOS_APP_ID',
     messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
@@ -23,7 +23,7 @@ class FirebaseConfig {
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'YOUR_FIREBASE_API_KEY_HERE',
+    apiKey: 'YOUR_FIREBASE_WEB_API_KEY_HERE',
     appId: 'YOUR_MACOS_APP_ID',
     messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
@@ -32,7 +32,7 @@ class FirebaseConfig {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'YOUR_FIREBASE_API_KEY_HERE',
+    apiKey: 'YOUR_FIREBASE_WEB_API_KEY_HERE',
     appId: 'YOUR_WINDOWS_APP_ID',
     messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
     projectId: 'YOUR_PROJECT_ID',
