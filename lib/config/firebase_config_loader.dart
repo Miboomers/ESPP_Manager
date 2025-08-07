@@ -1,5 +1,5 @@
-// Local version of the loader that uses the real Firebase configuration
-// Copy this to firebase_config_loader.dart for local development
+// CI/CD version of the loader - uses stub config
+// Will be replaced by local version for development
 
-// Export the real config for local development
-export 'firebase_config.dart';
+// Export stub config for CI/CD builds (Windows, mobile)
+export 'firebase_config_stub.dart';
