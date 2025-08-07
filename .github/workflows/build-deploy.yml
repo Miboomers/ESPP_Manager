@@ -94,7 +94,15 @@ jobs:
         flutter pub get
         
     - name: Build Web Release
-      run: flutter build web --release --base-href /
+      run: flutter build web --release --base-href /ESPP_Manager/
+      
+    - name: Fix GitHub Pages routing
+      run: |
+        # Copy index.html to 404.html for SPA routing
+        cp build/web/index.html build/web/404.html
+        
+        # Add .nojekyll file to prevent Jekyll processing
+        touch build/web/.nojekyll
       
     - name: Package Web Build
       run: |
