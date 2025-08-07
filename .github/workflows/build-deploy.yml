@@ -16,6 +16,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Setup Firebase config for CI/CD
+      shell: powershell
+      run: |
+        # Use stub config for CI/CD builds
+        Copy-Item -Path "lib\config\firebase_config_stub.dart" -Destination "lib\config\firebase_config.dart" -Force
+        Write-Host "✅ Using stub Firebase config for CI/CD build"
+        Get-Content "lib\config\firebase_config.dart" | Select-Object -First 5
+        
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
@@ -24,13 +32,6 @@ jobs:
         
     - name: Enable Windows Desktop
       run: flutter config --enable-windows-desktop
-      
-    - name: Setup Firebase config for CI/CD
-      shell: powershell
-      run: |
-        # Use stub config for CI/CD builds
-        Copy-Item -Path "lib\config\firebase_config_stub.dart" -Destination "lib\config\firebase_config.dart" -Force
-        Write-Host "✅ Using stub Firebase config for CI/CD build"
         
     - name: Install dependencies
       run: flutter pub get
@@ -75,17 +76,18 @@ Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.32.0'
-        channel: 'stable'
-        
     - name: Setup Firebase config for CI/CD
       run: |
         # Use stub config for CI/CD builds
         cp lib/config/firebase_config_stub.dart lib/config/firebase_config.dart
         echo "✅ Using stub Firebase config for CI/CD build"
+        head -5 lib/config/firebase_config.dart
+        
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.0'
+        channel: 'stable'
         
     - name: Enable Web & Install dependencies
       run: |
