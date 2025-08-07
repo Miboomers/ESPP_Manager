@@ -1,6 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:io';
 
 // Import Firebase configuration via loader
 // The loader will use real config locally or stub for CI/CD
@@ -44,32 +43,4 @@ class FirebaseInitService {
   
   static bool get isInitialized => _initialized;
 
-  // Check if real Firebase config is available
-  static Future<bool> _hasRealFirebaseConfig() async {
-    try {
-      // On web, we can't access files - check if we have real API keys
-      if (kIsWeb) {
-        // Check if web config has real keys (not demo keys)
-        final hasRealKeys = !firebase_config.FirebaseConfig.web.apiKey.contains('demo-api-key');
-        return hasRealKeys;
-      }
-      
-      // On other platforms, check if the real config file exists
-      final configFile = File('lib/config/firebase_config.dart');
-      final exists = await configFile.exists();
-      
-      if (exists) {
-        // Also check if it contains real API keys (not demo keys)
-        final content = await configFile.readAsString();
-        final hasRealKeys = !content.contains('demo-api-key-for-ci-builds');
-        return hasRealKeys;
-      }
-      
-      return false;
-    } catch (e) {
-      // On web or if file access fails, assume we have real config
-      if (kIsWeb) return true;
-      return false;
-    }
-  }
 }
