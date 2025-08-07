@@ -107,14 +107,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Simple Firebase check - always enable the toggle for testing
     bool isFirebaseInitialized = true;  // Force enable for testing
     
-    debugPrint('🔥 Cloud Sync Toggle: rebuilding section');
     
     // Use StreamBuilder to reactively watch Firebase Auth state changes
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         final currentUser = snapshot.data;
-        debugPrint('🔥 Cloud Sync Toggle: currentUser=$currentUser');
         
         return Column(
           children: [
@@ -162,11 +160,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             
             if (currentUser != null) ...[
-          // Sync Status (temporarily disabled for debugging)
+          // Sync Status
           const ListTile(
             leading: Icon(Icons.cloud_done),
             title: Text('Synchronisiert'),
-            subtitle: Text('Debug: Sync Status temporär deaktiviert'),
+            subtitle: Text('Daten werden automatisch synchronisiert'),
           ),
           
           // MFA Settings

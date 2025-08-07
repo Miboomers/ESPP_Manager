@@ -14,7 +14,6 @@ class ExchangeRateService {
       // Implementierung folgt wenn xml package hinzugefügt wird
       // return await OfficialExchangeRateService.getECBRate(date: date);
     } catch (e) {
-      print('EZB-Kurs-Abruf fehlgeschlagen: $e');
     }
     
     // Fallback zu EZB-Jahresdurchschnitten (auch finanzamt-konform)
@@ -68,7 +67,6 @@ class ExchangeRateService {
         }
       }
     } catch (e) {
-      print('API-Fehler beim Abrufen des aktuellen Wechselkurses: $e');
       rethrow;
     }
     

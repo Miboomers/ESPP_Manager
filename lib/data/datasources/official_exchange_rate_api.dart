@@ -22,7 +22,6 @@ class OfficialExchangeRateService {
         return _getECBAnnualAverage(date.year);
       }
     } catch (e) {
-      print('EZB-Kurs-Abruf fehlgeschlagen: $e');
       // Fallback zu unseren geschätzten Werten
       return _getFinanzamtKonformerFallback(date);
     }

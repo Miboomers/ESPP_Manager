@@ -122,7 +122,6 @@ class CloudSyncService {
     required String pin,
   }) async {
     try {
-      debugPrint('🔄 enableCloudSync started with ${localTransactions.length} transactions');
       _updateSyncStatus(SyncState.syncing, 'Cloud Sync wird aktiviert...');
       
       await initializeForUser(pin);
@@ -134,7 +133,6 @@ class CloudSyncService {
       
       _updateSyncStatus(SyncState.idle, 'Cloud Sync aktiviert');
     } catch (e) {
-      debugPrint('❌ enableCloudSync error: $e');
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
     }
@@ -160,7 +158,6 @@ class CloudSyncService {
     List<TransactionModel> transactions,
     SettingsModel settings,
   ) async {
-    debugPrint('🔄 Starting upload: ${transactions.length} transactions, settings');
     final batch = _firestore.batch();
     
     // Upload settings
@@ -183,7 +180,6 @@ class CloudSyncService {
     }
     
     await batch.commit();
-    debugPrint('✅ ${transactions.length} Transaktionen hochgeladen');
   }
   
   // Download all data (restore or new device)
@@ -263,7 +259,6 @@ class CloudSyncService {
         });
       }
       
-      debugPrint('✅ Transaction ${transaction.id} synchronisiert');
     } catch (e) {
       // Add to offline queue on error
       _pendingChanges.add(PendingChange(
@@ -273,7 +268,6 @@ class CloudSyncService {
         deleted: deleted,
         timestamp: DateTime.now(),
       ));
-      debugPrint('❌ Sync fehlgeschlagen, zur Queue hinzugefügt: $e');
     }
   }
   
@@ -311,7 +305,6 @@ class CloudSyncService {
         deleted: false,
         timestamp: DateTime.now(),
       ));
-      debugPrint('❌ Settings sync fehlgeschlagen: $e');
     }
   }
   
@@ -356,7 +349,6 @@ class CloudSyncService {
         
         processedChanges.add(change);
       } catch (e) {
-        debugPrint('❌ Fehler beim Verarbeiten von Change ${change.id}: $e');
       }
     }
     
@@ -369,10 +361,8 @@ class CloudSyncService {
           _pendingChanges.remove(change);
         }
         
-        debugPrint('✅ ${processedChanges.length} Änderungen synchronisiert');
         _updateSyncStatus(SyncState.idle, 'Sync abgeschlossen');
       } catch (e) {
-        debugPrint('❌ Batch commit fehlgeschlagen: $e');
         _updateSyncStatus(SyncState.error, 'Sync fehlgeschlagen');
       }
     }

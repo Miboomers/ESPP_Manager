@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
-import 'dart:io';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart' if (dart.library.html) 'package:open_file/open_file.dart';
+import 'dart:io' if (dart.library.html) 'dart:html';
 import '../../data/models/transaction_model.dart';
 
 class TaxReportGenerator {
@@ -22,17 +23,7 @@ class TaxReportGenerator {
     // Berechnungen für die Zusammenfassung - mit korrekter Lookback-Berücksichtigung
     final soldTransactions = transactions.where((t) => t.isSold).toList();
     
-    // DEBUG: Prüfe Lookback-Daten
-    print('🔍 DEBUG: Tax Report - Anzahl verkaufter Transaktionen: ${soldTransactions.length}');
-    for (int i = 0; i < soldTransactions.length; i++) {
-      final t = soldTransactions[i];
-      print('  Transaktion ${i + 1}:');
-      print('    - FMV per Share: ${t.fmvPerShare}');
-      print('    - Lookback FMV: ${t.lookbackFmv}');
-      print('    - Offering Period: ${t.offeringPeriod}');
-      print('    - ESPP Basis Price: ${t.esppBasisPrice}');
-      print('    - Ist verkauft: ${t.isSold}');
-    }
+    // Verkaufte Transaktionen für Bericht verarbeiten
     
     final totalShares = soldTransactions.fold<double>(0, (sum, t) => sum + t.quantity);
     final totalProceeds = soldTransactions.fold<double>(0, (sum, t) => sum + (t.totalSaleProceeds ?? 0));
@@ -226,16 +217,24 @@ class TaxReportGenerator {
     // Separate Seiten für detaillierte Tabelle
     _addTransactionTablePages(pdf, soldTransactions, font, boldFont, year);
 
-    // PDF speichern und anzeigen
+    // PDF speichern und anzeigen - Web-kompatibel
     final bytes = await pdf.save();
     
-    // PDF in temporäre Datei speichern
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/ESPP_Steuerbericht_$year.pdf');
-    await file.writeAsBytes(bytes);
-    
-    // PDF mit System-Standardanwendung öffnen
-    await OpenFile.open(file.path);
+    if (kIsWeb) {
+      // Auf Web: PDF direkt herunterladen über Browser
+      await Printing.sharePdf(
+        bytes: bytes, 
+        filename: 'ESPP_Steuerbericht_$year.pdf',
+      );
+    } else {
+      // Auf Desktop/Mobile: In temporäre Datei speichern und öffnen
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/ESPP_Steuerbericht_$year.pdf');
+      await file.writeAsBytes(bytes);
+      
+      // PDF mit System-Standardanwendung öffnen
+      await OpenFile.open(file.path);
+    }
     
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -270,7 +269,6 @@ class TaxReportGenerator {
     ];
     
     // Alle Datenzeilen vorbereiten mit Lookback-Informationen
-    print('🔍 DEBUG: Tabellendaten - Anzahl Transaktionen: ${transactions.length}');
     final allData = transactions.map((t) {
       final saleValueEUR = t.saleValueEURForTax ?? 0;
       final taxableGainEUR = t.taxableCapitalGainEUR ?? 0;
@@ -279,15 +277,6 @@ class TaxReportGenerator {
       // Wechselkurse für die Anzeige
       final exchangeRateAtPurchase = t.exchangeRateAtPurchase ?? 0.92;
       final exchangeRateAtSale = t.exchangeRateAtSale ?? 0.92;
-      
-      // DEBUG: Detaillierte Ausgabe für jede Transaktion
-      print('  📊 Tabellen-Zeile für Transaktion ${t.id}:');
-      print('    - Lookback FMV: ${t.lookbackFmv?.toStringAsFixed(2) ?? 'N/A'}');
-      print('    - Offering Period: ${t.offeringPeriod ?? 'N/A'}');
-      print('    - FMV per Share: ${t.fmvPerShare.toStringAsFixed(2)}');
-      print('    - Purchase Price: ${t.purchasePricePerShare.toStringAsFixed(2)}');
-      print('    - Geldwerter Vorteil: ${t.geldwerterVorteil.toStringAsFixed(2)}');
-      print('    - ESPP Basis Price: ${t.esppBasisPrice.toStringAsFixed(2)}');
       
       // Berechne EUR-Werte für doppelzeilige Anzeige
       final fmvStartEUR = (t.lookbackFmv ?? (t.purchasePricePerShare / 0.85)) * exchangeRateAtPurchase;

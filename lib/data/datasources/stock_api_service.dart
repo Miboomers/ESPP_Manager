@@ -19,14 +19,12 @@ class StockApiService {
     try {
       return await _getYahooFinancePrice(symbol);
     } catch (e) {
-      debugPrint('Yahoo Finance failed: $e');
     }
     
     // Fallback to Alpha Vantage
     try {
       return await _getAlphaVantagePrice(symbol);
     } catch (e) {
-      debugPrint('Alpha Vantage failed: $e');
       rethrow;
     }
   }
@@ -115,7 +113,6 @@ class StockApiService {
       }
     } catch (e) {
       // Log error and rethrow for better debugging
-      debugPrint('API Error for $symbol: $e');
       rethrow; // Don't hide the error!
     }
   }
@@ -145,7 +142,6 @@ class StockApiService {
         }
       }
     } catch (e) {
-      debugPrint('Error fetching exchange rate: $e');
     }
     
     // Fallback: return mock data for demo purposes
@@ -173,7 +169,6 @@ class StockApiService {
         }
       }
     } catch (e) {
-      debugPrint('Error fetching ECB exchange rate: $e');
     }
     
     return _getMockExchangeRate('USD', 'EUR');
@@ -261,7 +256,6 @@ class StockApiService {
         }
       }
     } catch (e) {
-      debugPrint('Error fetching historical exchange rate: $e');
     }
     
     // Fallback to current rate

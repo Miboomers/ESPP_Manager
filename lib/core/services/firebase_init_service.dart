@@ -29,10 +29,6 @@ class FirebaseInitService {
         throw UnsupportedError('Unsupported platform');
       }
       
-      // Check if we're using real config or stub
-      final isRealConfig = await _hasRealFirebaseConfig();
-      debugPrint(isRealConfig ? '✅ Using real Firebase config' : '🔧 Using stub Firebase config (CI/CD build)');
-      
       await Firebase.initializeApp(options: firebaseOptions);
       
       // setPersistence is only supported on web platforms
@@ -41,7 +37,6 @@ class FirebaseInitService {
       _initialized = true;
       debugPrint('✅ Firebase erfolgreich initialisiert für Projekt: espp-manager');
     } catch (e) {
-      debugPrint('❌ Firebase Initialisierung fehlgeschlagen: $e');
       // App funktioniert weiter im Offline-Modus
       _initialized = false;
     }

@@ -10,16 +10,13 @@ class TransactionsRepository {
 
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
-      print('[TransactionsRepository] Initializing...');
       try {
         final encryptionService = EncryptionService();
         await encryptionService.initialize();
         _storageService = SecureStorageService(encryptionService);
         await _storageService!.initialize();
         _isInitialized = true;
-        print('[TransactionsRepository] Initialization complete');
       } catch (e) {
-        print('[TransactionsRepository] Initialization error: $e');
         rethrow;
       }
     }
@@ -40,20 +37,16 @@ class TransactionsRepository {
   }
 
   Future<void> saveTransaction(TransactionModel transaction) async {
-    print('[TransactionsRepository] saveTransaction called for ID: ${transaction.id}');
     await _ensureInitialized();
     
     final transactions = await getAllTransactions();
-    print('[TransactionsRepository] Current transactions count: ${transactions.length}');
     
     final existingIndex = transactions.indexWhere((t) => t.id == transaction.id);
     
     if (existingIndex >= 0) {
       transactions[existingIndex] = transaction;
-      print('[TransactionsRepository] Updated existing transaction at index $existingIndex');
     } else {
       transactions.add(transaction);
-      print('[TransactionsRepository] Added new transaction, new count: ${transactions.length}');
     }
     
     await _saveTransactions(transactions);
@@ -99,8 +92,6 @@ class TransactionsRepository {
       'lastUpdated': DateTime.now().toIso8601String(),
     };
     
-    print('[TransactionsRepository] Saving ${transactions.length} transactions');
     await _storageService!.saveData(_transactionsKey, data);
-    print('[TransactionsRepository] Save completed');
   }
 }

@@ -29,7 +29,6 @@ class StockCacheRepository {
         return stockPrice;
       }
     } catch (e) {
-      print('Error reading cached stock price: $e');
     }
     
     return null;
@@ -41,7 +40,6 @@ class StockCacheRepository {
     try {
       await _stockPriceBox!.put(stockPrice.symbol, stockPrice.toJson());
     } catch (e) {
-      print('Error caching stock price: $e');
     }
   }
 
@@ -60,7 +58,6 @@ class StockCacheRepository {
         return exchangeRate;
       }
     } catch (e) {
-      print('Error reading cached exchange rate: $e');
     }
     
     return null;
@@ -73,7 +70,6 @@ class StockCacheRepository {
       final key = '${exchangeRate.fromCurrency}_${exchangeRate.toCurrency}';
       await _exchangeRateBox!.put(key, exchangeRate.toJson());
     } catch (e) {
-      print('Error caching exchange rate: $e');
     }
   }
 
@@ -105,7 +101,6 @@ class StockCacheRepository {
         }
       }
     } catch (e) {
-      print('Error clearing expired cache: $e');
     }
   }
 
@@ -116,7 +111,6 @@ class StockCacheRepository {
       await _stockPriceBox!.clear();
       await _exchangeRateBox!.clear();
     } catch (e) {
-      print('Error clearing all cache: $e');
     }
   }
 }
