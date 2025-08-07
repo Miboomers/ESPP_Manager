@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart' if (dart.library.html) 'package:open_file/open_file.dart';
-import 'dart:io' if (dart.library.html) 'dart:html';
+import '../../core/services/pdf_service.dart';
 import '../../data/models/transaction_model.dart';
 
 class TaxReportGenerator {
@@ -217,24 +214,12 @@ class TaxReportGenerator {
     // Separate Seiten für detaillierte Tabelle
     _addTransactionTablePages(pdf, soldTransactions, font, boldFont, year);
 
-    // PDF speichern und anzeigen - Web-kompatibel
+    // PDF speichern und anzeigen - plattformunabhängig
     final bytes = await pdf.save();
-    
-    if (kIsWeb) {
-      // Auf Web: PDF direkt herunterladen über Browser
-      await Printing.sharePdf(
-        bytes: bytes, 
-        filename: 'ESPP_Steuerbericht_$year.pdf',
-      );
-    } else {
-      // Auf Desktop/Mobile: In temporäre Datei speichern und öffnen
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/ESPP_Steuerbericht_$year.pdf');
-      await file.writeAsBytes(bytes);
-      
-      // PDF mit System-Standardanwendung öffnen
-      await OpenFile.open(file.path);
-    }
+    await PdfService.savePdf(
+      bytes: bytes,
+      filename: 'ESPP_Steuerbericht_$year.pdf',
+    );
     
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
