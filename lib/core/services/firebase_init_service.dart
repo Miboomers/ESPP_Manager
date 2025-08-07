@@ -52,7 +52,14 @@ class FirebaseInitService {
   // Check if real Firebase config is available
   static Future<bool> _hasRealFirebaseConfig() async {
     try {
-      // Check if the real config file exists
+      // On web, we can't access files - check if we have real API keys
+      if (kIsWeb) {
+        // Check if web config has real keys (not demo keys)
+        final hasRealKeys = !firebase_config.FirebaseConfig.web.apiKey.contains('demo-api-key');
+        return hasRealKeys;
+      }
+      
+      // On other platforms, check if the real config file exists
       final configFile = File('lib/config/firebase_config.dart');
       final exists = await configFile.exists();
       
@@ -65,6 +72,8 @@ class FirebaseInitService {
       
       return false;
     } catch (e) {
+      // On web or if file access fails, assume we have real config
+      if (kIsWeb) return true;
       return false;
     }
   }
