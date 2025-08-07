@@ -2,8 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 
-// Import real config, fallback to stub for CI/CD builds
-import '../../config/firebase_config.dart' as firebase_config;
+// Import Firebase configuration via loader
+// The loader will use real config locally or stub for CI/CD
+import '../../config/firebase_config_loader.dart' as firebase_config;
 
 class FirebaseInitService {
   static bool _initialized = false;

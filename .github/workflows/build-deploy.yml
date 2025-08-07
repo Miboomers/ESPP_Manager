@@ -19,10 +19,10 @@ jobs:
     - name: Setup Firebase config for CI/CD
       shell: powershell
       run: |
-        # Use stub config for CI/CD builds
-        Copy-Item -Path "lib\config\firebase_config_stub.dart" -Destination "lib\config\firebase_config.dart" -Force
+        # CI/CD uses stub config via firebase_config_loader.dart
+        # No need to copy files - stub is already imported by default
         Write-Host "✅ Using stub Firebase config for CI/CD build"
-        Get-Content "lib\config\firebase_config.dart" | Select-Object -First 5
+        Get-Content "lib\config\firebase_config_stub.dart" | Select-Object -First 5
         
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
@@ -78,10 +78,10 @@ Cloud Sync und alle Features funktionieren wie auf macOS/iOS.
       
     - name: Setup Firebase config for CI/CD
       run: |
-        # Use stub config for CI/CD builds
-        cp lib/config/firebase_config_stub.dart lib/config/firebase_config.dart
+        # CI/CD uses stub config via firebase_config_loader.dart
+        # No need to copy files - stub is already imported by default
         echo "✅ Using stub Firebase config for CI/CD build"
-        head -5 lib/config/firebase_config.dart
+        head -5 lib/config/firebase_config_stub.dart
         
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
