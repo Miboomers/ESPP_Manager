@@ -10,9 +10,10 @@ on:
 
 # Permissions needed for GitHub Pages deployment
 permissions:
-  contents: read
+  contents: write  # Changed from read to write for gh-pages branch creation
   pages: write
   id-token: write
+  actions: read
 
 jobs:
   build-windows:
@@ -129,6 +130,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./build/web
         force_orphan: true
+        enable_jekyll: false
         user_name: 'github-actions[bot]'
         user_email: 'github-actions[bot]@users.noreply.github.com'
 
