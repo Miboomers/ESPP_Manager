@@ -1160,11 +1160,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           debugPrint('✅ Local changes uploaded to cloud');
           
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('✅ Manuelle Synchronisierung erfolgreich! ${cloudData.transactions.length} Transaktionen geladen'),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 5),
+            // Zeige detaillierte Informationen in der App
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('✅ Synchronisierung erfolgreich'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('📥 ${cloudData.transactions.length} Transaktionen aus der Cloud geladen'),
+                    if (cloudData.settings != null) 
+                      const Text('⚙️ Einstellungen aktualisiert'),
+                    const SizedBox(height: 8),
+                    const Text('💡 Schauen Sie jetzt in Ihr Portfolio - die Daten sollten sichtbar sein!'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Verstanden'),
+                  ),
+                ],
               ),
             );
           }
@@ -1172,11 +1189,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         } catch (e) {
           debugPrint('❌ Error during manual sync: $e');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('❌ Fehler bei manueller Synchronisierung: $e'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 5),
+            // Zeige detaillierte Fehlerinformationen
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('❌ Synchronisierung fehlgeschlagen'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Ein Fehler ist aufgetreten:'),
+                    const SizedBox(height: 8),
+                    Text('$e', style: const TextStyle(fontSize: 12)),
+                    const SizedBox(height: 8),
+                    const Text('💡 Versuchen Sie es später erneut oder kontaktieren Sie den Support.'),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Verstanden'),
+                  ),
+                ],
               ),
             );
           }
