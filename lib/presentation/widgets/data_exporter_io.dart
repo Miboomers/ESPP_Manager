@@ -229,17 +229,11 @@ class DataExporter {
   }
   
   static Future<void> _exportAsExcel(List<TransactionModel> transactions, String filePath) async {
-    // Excel-Objekt ohne Standard-Sheets erstellen
+    // Excel-Objekt mit Standard-Sheet erstellen
     final excel = Excel.createExcel();
     
-    // Alle vorhandenen Sheets entfernen (einschließlich Sheet1)
-    final sheetNames = excel.sheets.keys.toList();
-    for (final sheetName in sheetNames) {
-      excel.delete(sheetName);
-    }
-    
-    // Unser eigenes Sheet erstellen
-    final sheet = excel['ESPP_Export'];
+    // Das erste Sheet (Sheet1) direkt verwenden
+    final sheet = excel['Sheet1'];
     
     // Header
     final headers = [
