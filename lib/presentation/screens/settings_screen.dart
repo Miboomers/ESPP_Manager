@@ -1159,6 +1159,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           await cloudService.syncPendingChanges();
           debugPrint('✅ Local changes uploaded to cloud');
           
+          // 4. WICHTIG: Warte kurz und prüfe den finalen Zustand
+          await Future.delayed(const Duration(milliseconds: 500));
+          final finalTransactions = await ref.read(transactionsProvider.future);
+          debugPrint('🔍 Final check: ${finalTransactions.length} transactions in provider');
+          
           if (mounted) {
             // Zeige detaillierte Informationen in der App
             showDialog(
@@ -1173,7 +1178,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     if (cloudData.settings != null) 
                       const Text('⚙️ Einstellungen aktualisiert'),
                     const SizedBox(height: 8),
-                    const Text('💡 Schauen Sie jetzt in Ihr Portfolio - die Daten sollten sichtbar sein!'),
+                    Text('🔍 Lokaler Provider: ${finalTransactions.length} Transaktionen'),
+                    const SizedBox(height: 8),
+                    if (finalTransactions.length > 0)
+                      const Text('💡 Schauen Sie jetzt in Ihr Portfolio - die Daten sollten sichtbar sein!')
+                    else
+                      const Text('⚠️ Daten wurden geladen, aber der Provider wurde nicht aktualisiert!'),
                   ],
                 ),
                 actions: [
@@ -1188,6 +1198,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           
         } catch (e) {
           debugPrint('❌ Error during manual sync: $e');
+          debugPrint('❌ Error stack: ${StackTrace.current}');
+          
           if (mounted) {
             // Zeige detaillierte Fehlerinformationen
             showDialog(
@@ -1201,6 +1213,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const Text('Ein Fehler ist aufgetreten:'),
                     const SizedBox(height: 8),
                     Text('$e', style: const TextStyle(fontSize: 12)),
+                    const SizedBox(height: 8),
+                    const Text('🔍 Fehlerdetails wurden in der Konsole protokolliert.'),
                     const SizedBox(height: 8),
                     const Text('💡 Versuchen Sie es später erneut oder kontaktieren Sie den Support.'),
                   ],
@@ -1248,7 +1262,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       debugPrint('💾 Updating local providers with cloud data...');
       
-      // Aktualisiere Transaktionen - lösche alle lokalen und füge Cloud-Daten hinzu
+      // WICHTIG: Verwende eine andere Strategie - direkte Provider-Manipulation
       final transactionsNotifier = ref.read(transactionsProvider.notifier);
       
       // Hole aktuelle lokale Transaktionen
@@ -1263,6 +1277,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
       debugPrint('✅ All local transactions deleted');
       
+      // Warte kurz, bis alle Löschungen abgeschlossen sind
+      await Future.delayed(const Duration(milliseconds: 200));
+      
       // Füge alle Cloud-Transaktionen hinzu
       debugPrint('➕ Adding ${cloudData.transactions.length} cloud transactions...');
       for (final transaction in cloudData.transactions) {
@@ -1270,6 +1287,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await transactionsNotifier.addTransaction(transaction);
       }
       debugPrint('✅ All cloud transactions added');
+      
+      // Warte kurz, bis alle Hinzufügungen abgeschlossen sind
+      await Future.delayed(const Duration(milliseconds: 200));
       
       // Aktualisiere Einstellungen
       if (cloudData.settings != null) {
@@ -1281,7 +1301,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         debugPrint('ℹ️ No settings to update');
       }
       
-      // Prüfe den finalen Zustand
+      // WICHTIG: Force Provider-Refresh
+      debugPrint('🔄 Forcing provider refresh...');
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(settingsProvider);
+      
+      // Warte kurz und prüfe den finalen Zustand
+      await Future.delayed(const Duration(milliseconds: 500));
       final finalTransactions = await ref.read(transactionsProvider.future);
       debugPrint('🔍 Final state: ${finalTransactions.length} transactions in provider');
       
