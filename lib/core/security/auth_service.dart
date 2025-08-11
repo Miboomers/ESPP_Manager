@@ -105,6 +105,28 @@ class AuthService {
     }
   }
   
+  /// Logout: Reset authentication state without deleting data
+  Future<void> logout() async {
+    try {
+      // Reset last activity timestamp
+      if (_secureStorage != null) {
+        await _secureStorage!.delete(key: _lastActivityKey);
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_lastActivityKey);
+      }
+      
+      // Note: We don't delete the PIN or biometric settings
+      // This allows the user to log back in with the same credentials
+      // All data remains encrypted and secure
+      
+      debugPrint('Logout completed - authentication state reset');
+    } catch (e) {
+      debugPrint('Error during logout: $e');
+      rethrow;
+    }
+  }
+  
   /// Prüft, ob Biometrie aktiviert ist
   Future<bool> isBiometricEnabled() async {
     if (_secureStorage != null) {

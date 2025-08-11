@@ -95,6 +95,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const Divider(height: 1),
         _buildCloudSyncSection(context, settings),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: const Text('Abmelden', style: TextStyle(color: Colors.red)),
+          subtitle: const Text('Session beenden und zur PIN-Anmeldung zurückkehren'),
+          onTap: () => _showLogoutDialog(context),
+        ),
       ],
     );
   }
@@ -602,6 +609,87 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+  
+  /// Show logout confirmation dialog
+  Future<void> _showLogoutDialog(BuildContext context) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Abmelden'),
+        content: const Text(
+          'Möchten Sie sich wirklich abmelden?\n\n'
+          '• Ihre Daten bleiben verschlüsselt gespeichert\n'
+          '• Cloud-Synchronisation wird beendet\n'
+          '• Sie müssen sich beim nächsten Start mit Ihrer PIN anmelden',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              try {
+                // Close dialog first
+              Navigator.pop(context);
+              
+              // Show loading indicator
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sie werden abgemeldet...'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              
+              // Perform logout
+              await _performLogout();
+              
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Fehler beim Abmelden: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Abmelden'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Perform the actual logout
+  Future<void> _performLogout() async {
+    try {
+      // 1. End Firebase Auth session
+      await FirebaseAuth.instance.signOut();
+      
+      // 2. Reset local authentication state
+      await _authService.logout();
+      
+      // 3. Navigate back to login screen
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login', // Assuming you have a login route
+          (route) => false, // Remove all previous routes
+        );
+      }
+    } catch (e) {
+      debugPrint('Error during logout: $e');
+      rethrow;
+    }
   }
 
   Future<void> _showAutoLockDialog(
