@@ -525,8 +525,9 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
             data: (settings) async {
               debugPrint('🔄 Local settings loaded, initializing cloud sync...');
               
-              // Check if PIN is set
-              if (!await _authService.isPinSet()) {
+              // Get stored PIN for cloud sync
+              final storedPin = await _authService.getStoredPin();
+              if (storedPin == null) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -538,38 +539,20 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
                 return;
               }
               
-              // Show PIN input dialog for verification (only once)
-              final pin = await _showPinInputDialog();
-              if (pin == null) {
-                debugPrint('❌ User cancelled PIN input');
-                return;
-              }
+              // Use stored App-PIN for cloud sync (no need to ask again)
+              debugPrint('🔑 Using stored App-PIN for cloud sync');
               
-              // Verify PIN
-              final isValid = await _authService.verifyPin(pin);
-              if (!isValid) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Falsche PIN'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-                return;
-              }
-              
-              // Initialize cloud sync with verified PIN
+              // Initialize cloud sync with stored PIN
               await cloudService.enableCloudSync(
                 localTransactions: transactions,
                 localSettings: settings,
-                pin: pin, // Use verified PIN
+                pin: storedPin, // Use stored App-PIN
               );
-              debugPrint('🔥 Cloud sync initialized with verified PIN!');
+              debugPrint('🔥 Cloud sync initialized with App-PIN!');
               
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content: Text('Cloud-Synchronisation mit App-PIN aktiviert'),
                     backgroundColor: Colors.green,
                     duration: const Duration(seconds: 3),
@@ -603,55 +586,6 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
         );
       }
     }
-  }
-  
-  // Show PIN input dialog for cloud sync (only once)
-  Future<String?> _showPinInputDialog() async {
-    final pinController = TextEditingController();
-    
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('PIN für Cloud-Sync'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Bitte geben Sie Ihre App-PIN ein, um die Cloud-Synchronisation zu aktivieren.\n\nDiese PIN wird für alle Cloud-Operationen verwendet.',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              decoration: const InputDecoration(
-                labelText: 'App-PIN',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              maxLength: 6,
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Abbrechen'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final pin = pinController.text.trim();
-              if (pin.isNotEmpty) {
-                Navigator.pop(context, pin);
-              }
-            },
-            child: const Text('Bestätigen'),
-          ),
-        ],
-      ),
-    );
   }
   
   Future<void> _handleGoogleSignIn() async {

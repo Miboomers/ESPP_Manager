@@ -118,8 +118,21 @@ class CloudSyncService {
   // User specific paths
   String get _userPath {
     final user = _auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
-    return 'users/${user.uid}';
+    debugPrint('🔍 _userPath getter called');
+    debugPrint('🔍 _auth.currentUser: $user');
+    if (user == null) {
+      debugPrint('❌ _auth.currentUser is null!');
+      throw Exception('User nicht angemeldet');
+    }
+    final uid = user.uid;
+    debugPrint('🔍 User UID: $uid');
+    if (uid.isEmpty) {
+      debugPrint('❌ User UID is empty!');
+      throw Exception('User UID ist leer');
+    }
+    final path = 'users/$uid';
+    debugPrint('🔍 Generated path: $path');
+    return path;
   }
   
   // PIN-specific paths
@@ -203,16 +216,27 @@ class CloudSyncService {
       await initializeForUser(pin);
       debugPrint('🔄 User initialized for sync');
       
-      // Initialize PIN path in cloud
+      // Initialize PIN path in cloud - CRITICAL STEP
+      debugPrint('🔑 Initializing PIN path for cloud sync...');
       await _initializePinPath(pin);
-      debugPrint('🔄 PIN path initialized in cloud');
+      debugPrint('✅ PIN path successfully initialized in cloud');
+      
+      // Verify PIN path exists before proceeding
+      final pinDoc = await _firestore.doc(_pinPath).get();
+      if (!pinDoc.exists) {
+        throw Exception('PIN path was not created despite successful initialization');
+      }
+      debugPrint('✅ PIN path verified before data upload');
       
       // Upload all local data to cloud
       await _uploadAllData(localTransactions, localSettings);
-      debugPrint('🔄 All data uploaded successfully');
+      debugPrint('✅ All data uploaded successfully');
       
       _updateSyncStatus(SyncState.idle, 'Cloud Sync aktiviert');
+      debugPrint('🎉 Cloud sync successfully enabled with PIN path');
+      
     } catch (e) {
+      debugPrint('❌ Critical error during cloud sync initialization: $e');
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
     }
@@ -222,13 +246,42 @@ class CloudSyncService {
   Future<void> _initializePinPath(String pin) async {
     try {
       debugPrint('🔍 Starting PIN path initialization...');
+      
+      // Debug user authentication state
+      final currentUser = _auth.currentUser;
+      debugPrint('🔍 Current user: $currentUser');
+      if (currentUser != null) {
+        debugPrint('🔍 User UID: ${currentUser.uid}');
+        debugPrint('🔍 User email: ${currentUser.email}');
+      }
+      
+      // Debug path generation
       debugPrint('🔍 User path: $_userPath');
       debugPrint('🔍 PIN path: $_pinPath');
       
       // Validate path before proceeding
       if (_pinPath.isEmpty || _pinPath.contains('null')) {
+        debugPrint('❌ Invalid PIN path detected: $_pinPath');
         throw Exception('Invalid PIN path: $_pinPath');
       }
+      
+      // Additional Firebase path validation
+      if (!_pinPath.startsWith('users/') || _pinPath.split('/').length != 3) {
+        debugPrint('❌ Invalid Firebase path structure: $_pinPath');
+        debugPrint('❌ Expected format: users/{uid}/pin');
+        debugPrint('❌ Actual format: ${_pinPath.split('/')}');
+        throw Exception('Invalid Firebase path structure: $_pinPath');
+      }
+      
+      // Validate UID part
+      final pathParts = _pinPath.split('/');
+      final uid = pathParts[1];
+      if (uid.isEmpty || uid.length < 10) {
+        debugPrint('❌ Invalid UID in path: $uid');
+        throw Exception('Invalid UID in path: $uid');
+      }
+      
+      debugPrint('✅ Firebase path validation passed');
       
       // Clean up any existing invalid PIN path first
       await _cleanupInvalidPinPath();
@@ -248,6 +301,8 @@ class CloudSyncService {
       };
       
       debugPrint('🔍 PIN data prepared: $pinData');
+      debugPrint('🔍 About to call _firestore.doc($_pinPath).set()...');
+      debugPrint('🔍 Final path being used: $_pinPath');
       
       // Try to create the document
       await _firestore.doc(_pinPath).set(pinData);
@@ -288,6 +343,19 @@ class CloudSyncService {
   Future<void> _cleanupInvalidPinPath() async {
     try {
       debugPrint('🧹 Cleaning up any existing invalid PIN path...');
+      debugPrint('🧹 PIN path to clean: $_pinPath');
+      
+      // Validate path before proceeding with cleanup
+      if (_pinPath.isEmpty || _pinPath.contains('null')) {
+        debugPrint('⚠️ Skipping cleanup - invalid PIN path: $_pinPath');
+        return;
+      }
+      
+      // Additional Firebase path validation for cleanup
+      if (!_pinPath.startsWith('users/') || _pinPath.split('/').length != 3) {
+        debugPrint('⚠️ Skipping cleanup - invalid Firebase path structure: $_pinPath');
+        return;
+      }
       
       // Check if PIN document exists
       final existingPinDoc = await _firestore.doc(_pinPath).get();
