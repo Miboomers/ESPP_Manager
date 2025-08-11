@@ -1,15 +1,14 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
 
 class AuthService {
-  static const String _pinKey = 'espp_pin_hash';
-  static const String _biometricEnabledKey = 'espp_biometric_enabled';
-  static const String _lastActivityKey = 'espp_last_activity';
-  static const int autoLockMinutes = 5;
+  static const String _pinKey = 'user_pin';
+  static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _lastActivityKey = 'last_activity';
   
   final FlutterSecureStorage? _secureStorage;
   final LocalAuthentication _localAuth;
@@ -64,7 +63,13 @@ class AuthService {
     return digest.toString();
   }
   
+  /// Prüft, ob Biometrie auf der aktuellen Plattform verfügbar ist
   Future<bool> isBiometricAvailable() async {
+    // Web-Plattformen unterstützen keine lokale Biometrie
+    if (kIsWeb) {
+      return false;
+    }
+    
     try {
       final isAvailable = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
@@ -74,7 +79,12 @@ class AuthService {
     }
   }
   
+  /// Gibt verfügbare Biometrie-Typen zurück (nur auf unterstützten Plattformen)
   Future<List<BiometricType>> getAvailableBiometrics() async {
+    if (kIsWeb) {
+      return [];
+    }
+    
     try {
       return await _localAuth.getAvailableBiometrics();
     } catch (e) {
@@ -82,6 +92,7 @@ class AuthService {
     }
   }
   
+  /// Aktiviert/Deaktiviert Biometrie (nur auf unterstützten Plattformen)
   Future<void> setBiometricEnabled(bool enabled) async {
     if (_secureStorage != null) {
       await _secureStorage!.write(
@@ -94,6 +105,7 @@ class AuthService {
     }
   }
   
+  /// Prüft, ob Biometrie aktiviert ist
   Future<bool> isBiometricEnabled() async {
     if (_secureStorage != null) {
       final value = await _secureStorage!.read(key: _biometricEnabledKey);
@@ -104,7 +116,13 @@ class AuthService {
     }
   }
   
+  /// Authentifizierung über Biometrie (nur auf unterstützten Plattformen)
   Future<bool> authenticateWithBiometric() async {
+    // Web-Plattformen verwenden PIN-basierte Authentifizierung
+    if (kIsWeb) {
+      return false;
+    }
+    
     try {
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Bitte authentifizieren Sie sich für den Zugriff auf ESPP Manager',
@@ -124,6 +142,7 @@ class AuthService {
     }
   }
   
+  /// Hauptauthentifizierungsmethode
   Future<bool> authenticate({String? pin}) async {
     if (pin != null) {
       final verified = await verifyPin(pin);
@@ -133,9 +152,12 @@ class AuthService {
       return verified;
     }
     
-    final biometricEnabled = await isBiometricEnabled();
-    if (biometricEnabled) {
-      return await authenticateWithBiometric();
+    // Prüfe Biometrie nur auf unterstützten Plattformen
+    if (!kIsWeb) {
+      final biometricEnabled = await isBiometricEnabled();
+      if (biometricEnabled) {
+        return await authenticateWithBiometric();
+      }
     }
     
     return false;
@@ -160,25 +182,46 @@ class AuthService {
       lastActivityStr = prefs.getString(_lastActivityKey);
     }
     
-    if (lastActivityStr == null) return true;
+    if (lastActivityStr == null) return false;
     
-    final lastActivity = DateTime.parse(lastActivityStr);
-    final now = DateTime.now();
-    final difference = now.difference(lastActivity);
-    
-    return difference.inMinutes >= autoLockMinutes;
+    try {
+      final lastActivity = DateTime.parse(lastActivityStr);
+      final now = DateTime.now();
+      final difference = now.difference(lastActivity);
+      
+      // Auto-Lock nach 5 Minuten Inaktivität
+      return difference.inMinutes >= 5;
+    } catch (e) {
+      return false;
+    }
   }
   
-  Future<void> clearAuth() async {
+  Future<void> clearLastActivity() async {
     if (_secureStorage != null) {
-      await _secureStorage!.delete(key: _pinKey);
-      await _secureStorage!.delete(key: _biometricEnabledKey);
       await _secureStorage!.delete(key: _lastActivityKey);
     } else {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_pinKey);
-      await prefs.remove(_biometricEnabledKey);
       await prefs.remove(_lastActivityKey);
     }
+  }
+  
+  /// Plattformspezifische Konfiguration
+  Map<String, dynamic> getPlatformConfig() {
+    return {
+      'isWeb': kIsWeb,
+      'supportsBiometrics': !kIsWeb,
+      'supportsSecureStorage': _secureStorage != null,
+      'platform': _getPlatformString(),
+    };
+  }
+  
+  String _getPlatformString() {
+    if (kIsWeb) return 'web';
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'android';
+    if (defaultTargetPlatform == TargetPlatform.macOS) return 'macos';
+    if (defaultTargetPlatform == TargetPlatform.windows) return 'windows';
+    if (defaultTargetPlatform == TargetPlatform.linux) return 'linux';
+    return 'unknown';
   }
 }
