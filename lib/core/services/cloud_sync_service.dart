@@ -221,20 +221,41 @@ class CloudSyncService {
   /// Initialize PIN path in cloud
   Future<void> _initializePinPath(String pin) async {
     try {
+      debugPrint('🔍 Starting PIN path initialization...');
+      debugPrint('🔍 User path: $_userPath');
+      debugPrint('🔍 PIN path: $_pinPath');
+      
       final pinHash = _hashPin(pin);
       final pinVersion = DateTime.now().millisecondsSinceEpoch;
       
-      await _firestore.doc(_pinPath).set({
+      debugPrint('🔍 PIN hash: ${pinHash.substring(0, 8)}...');
+      debugPrint('🔍 PIN version: $pinVersion');
+      
+      final pinData = {
         _pinHashKey: pinHash,
         _pinVersionKey: pinVersion,
         'updated_at': FieldValue.serverTimestamp(),
         'created_at': FieldValue.serverTimestamp(),
         'initial_setup': true,
-      });
+      };
+      
+      debugPrint('🔍 PIN data prepared: $pinData');
+      
+      await _firestore.doc(_pinPath).set(pinData);
       
       debugPrint('✅ PIN path initialized in cloud: $_pinPath');
+      
+      // Verify the document was created
+      final verifyDoc = await _firestore.doc(_pinPath).get();
+      if (verifyDoc.exists) {
+        debugPrint('✅ PIN document verified in cloud');
+      } else {
+        debugPrint('❌ PIN document not found after creation');
+      }
     } catch (e) {
       debugPrint('❌ Error initializing PIN path: $e');
+      debugPrint('❌ Error type: ${e.runtimeType}');
+      debugPrint('❌ Error stack: ${StackTrace.current}');
       // Don't rethrow - this is not critical for sync
     }
   }
