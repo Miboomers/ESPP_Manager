@@ -678,26 +678,37 @@ class CloudSyncService {
   /// Get PIN info from cloud
   Future<CloudDataInfo> _getPinInfo() async {
     try {
+      debugPrint('🔍 Getting PIN info from cloud...');
+      
       // Check if user is authenticated
       final user = _auth.currentUser;
       if (user == null) {
+        debugPrint('❌ User not authenticated');
         return CloudDataInfo(
           status: 'Nicht angemeldet',
           details: 'User ist nicht bei Firebase angemeldet',
         );
       }
       
+      debugPrint('🔍 User authenticated: ${user.uid}');
+      debugPrint('🔍 PIN path: $_pinPath');
+      
       // Check if PIN document exists
       final pinDoc = await _firestore.doc(_pinPath).get();
       
       if (!pinDoc.exists) {
+        debugPrint('❌ PIN document does not exist');
         return CloudDataInfo(
           status: 'Keine PIN-Info',
           details: 'PIN-Informationen wurden noch nicht in der Cloud gespeichert',
         );
       }
       
+      debugPrint('✅ PIN document exists, reading data...');
+      
       final data = pinDoc.data()!;
+      debugPrint('🔍 PIN data: $data');
+      
       final version = data[_pinVersionKey] as int?;
       final lastTime = data['updated_at'] as Timestamp?;
       String? lastModified;
@@ -706,6 +717,8 @@ class CloudSyncService {
         lastModified = '${lastTime.toDate().day}.${lastTime.toDate().month}.${lastTime.toDate().year} ${lastTime.toDate().hour}:${lastTime.toDate().minute}';
       }
       
+      debugPrint('✅ PIN info successfully retrieved');
+      
       return CloudDataInfo(
         status: 'Verfügbar',
         count: version,
@@ -713,10 +726,12 @@ class CloudSyncService {
         details: 'PIN-Version $version in der Cloud gespeichert',
       );
     } catch (e) {
-      debugPrint('Error getting PIN info: $e');
+      debugPrint('❌ Error getting PIN info: $e');
+      debugPrint('❌ Error type: ${e.runtimeType}');
       
       // Provide more specific error information
       if (e.toString().contains('Invalid argument(s): A document path must point to a valid document')) {
+        debugPrint('❌ Document path error detected');
         return CloudDataInfo(
           status: 'PIN-Pfad nicht verfügbar',
           details: 'PIN-Informationen werden bei der ersten PIN-Änderung erstellt',
