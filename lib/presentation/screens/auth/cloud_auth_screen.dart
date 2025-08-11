@@ -562,30 +562,8 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
               // Use stored Cloud-Passwort for cloud sync
               debugPrint('🔑 Using Cloud-Passwort for cloud sync');
               
-              // WICHTIG: Setze den Callback VOR der Cloud-Sync-Aktivierung!
-              cloudService.setDataUpdateCallback((transactions, settings) {
-                debugPrint('🔄 Data update callback called from CloudAuthScreen: ${transactions.length} transactions');
-                
-                // WICHTIG: Nach der Cloud-Sync-Aktivierung die App neu laden
-                if (mounted) {
-                  // Zeige Benutzerbenachrichtigung
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('✅ ${transactions.length} Transaktionen aus der Cloud geladen - App wird neu geladen'),
-                      backgroundColor: Colors.green,
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-                  
-                  // Lade die App nach kurzer Verzögerung neu
-                  Future.delayed(const Duration(seconds: 2), () {
-                    if (mounted) {
-                      Navigator.of(context).pushReplacementNamed('/');
-                    }
-                  });
-                }
-              });
-              debugPrint('✅ Data update callback set before cloud sync activation');
+              // WICHTIG: Der Callback wird jetzt in der HomeScreen gesetzt
+              debugPrint('💡 Cloud-Sync callback wird in HomeScreen gesetzt');
               
               // Initialize cloud sync with cloud password
               await cloudService.enableCloudSync(

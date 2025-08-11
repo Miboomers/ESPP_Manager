@@ -25,8 +25,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     // 🔄 Startup-Cloud-Synchronisierung nach dem Build
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // WICHTIG: Setze zuerst den Callback
+      _setCloudSyncCallback();
+      // Dann führe Startup-Sync durch
       _performStartupCloudSync();
     });
+  }
+  
+  /// Setzt den Callback für Cloud-Sync-Updates
+  void _setCloudSyncCallback() {
+    final cloudService = ref.read(cloudSyncServiceProvider);
+    
+    // WICHTIG: Setze den Callback für Cloud-Sync-Updates
+    cloudService.setDataUpdateCallback((transactions, settings) {
+      debugPrint('🔄 Cloud-Sync callback called in HomeScreen: ${transactions.length} transactions');
+      
+      // Aktualisiere lokale Provider mit Cloud-Daten
+      _updateLocalProvidersWithCloudData((
+        transactions: transactions,
+        settings: settings,
+      ));
+      
+      // Zeige Benutzerbenachrichtigung
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${transactions.length} Transaktionen aus der Cloud synchronisiert'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
+    
+    debugPrint('✅ Cloud-Sync callback set in HomeScreen');
   }
 
   /// Führt eine intelligente Cloud-Synchronisierung beim App-Start durch
