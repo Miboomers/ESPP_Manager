@@ -632,12 +632,22 @@ class CloudSyncService {
   /// Get PIN info from cloud
   Future<CloudDataInfo> _getPinInfo() async {
     try {
+      // Check if user is authenticated
+      final user = _auth.currentUser;
+      if (user == null) {
+        return CloudDataInfo(
+          status: 'Nicht angemeldet',
+          details: 'User ist nicht bei Firebase angemeldet',
+        );
+      }
+      
+      // Check if PIN document exists
       final pinDoc = await _firestore.doc(_pinPath).get();
       
       if (!pinDoc.exists) {
         return CloudDataInfo(
           status: 'Keine PIN-Info',
-          details: 'Keine PIN-Informationen in der Cloud gefunden',
+          details: 'PIN-Informationen wurden noch nicht in der Cloud gespeichert',
         );
       }
       
@@ -657,6 +667,16 @@ class CloudSyncService {
         details: 'PIN-Version $version in der Cloud gespeichert',
       );
     } catch (e) {
+      debugPrint('Error getting PIN info: $e');
+      
+      // Provide more specific error information
+      if (e.toString().contains('Invalid argument(s): A document path must point to a valid document')) {
+        return CloudDataInfo(
+          status: 'PIN-Pfad nicht verfügbar',
+          details: 'PIN-Informationen werden bei der ersten PIN-Änderung erstellt',
+        );
+      }
+      
       return CloudDataInfo(
         status: 'Fehler beim Laden',
         details: 'Fehler: $e',
