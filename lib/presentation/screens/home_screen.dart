@@ -7,14 +7,68 @@ import '../providers/stock_price_provider.dart';
 import '../../data/models/transaction_model.dart';
 import '../../core/utils/number_formatter.dart';
 import '../../core/utils/app_icons.dart';
+import '../../core/services/cloud_sync_service.dart';
 import '../widgets/common_bottom_action_bar.dart';
 import '../widgets/portfolio_summary_widget.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // 🔄 Startup-Cloud-Synchronisierung nach dem Build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _performStartupCloudSync();
+    });
+  }
+
+  /// Führt eine Cloud-Synchronisierung beim App-Start durch
+  Future<void> _performStartupCloudSync() async {
+    try {
+      debugPrint('🚀 Starting startup cloud sync...');
+      
+      // Prüfe ob Cloud-Sync aktiviert ist
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      
+      // Warte kurz, bis alle Provider initialisiert sind
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Hole aktuelle lokale Daten
+      final transactions = await ref.read(transactionsProvider.future);
+      final settings = await ref.read(settingsProvider.future);
+      
+      debugPrint('📊 Local data: ${transactions.length} transactions, settings available: ${settings != null}');
+      
+      // 🔄 Vollständige Startup-Synchronisierung
+      // 1. Alle lokalen Transaktionen in die Cloud hochladen
+      for (final transaction in transactions) {
+        await cloudService.syncTransaction(transaction);
+      }
+      
+      // 2. Einstellungen synchronisieren
+      if (settings != null) {
+        await cloudService.syncSettings(settings);
+      }
+      
+      // 3. Alle ausstehenden Änderungen synchronisieren
+      await cloudService.syncPendingChanges();
+      
+      debugPrint('✅ Startup cloud sync completed - ${transactions.length} transactions synced');
+      
+    } catch (e) {
+      debugPrint('⚠️ Startup cloud sync failed: $e');
+      // Nicht kritisch - App funktioniert auch ohne Cloud-Sync
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ESPP Manager'),

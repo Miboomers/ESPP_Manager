@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart'; // Nicht mehr verwendet
 
 import '../../../core/services/cloud_sync_service.dart';
-import '../../../core/security/auth_service.dart';
+// import '../../../core/security/auth_service.dart'; // Nicht mehr verwendet
 import '../../../core/security/cloud_password_service.dart';
 import '../../../core/security/mfa_service.dart';
 import '../../providers/transactions_provider.dart';
@@ -36,12 +36,12 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
   int _trustDays = 30;
   
   // Auth service für PIN-Zugriff
-  late final AuthService _authService;
+  // late final AuthService _authService; // Nicht mehr verwendet
   
   @override
   void initState() {
     super.initState();
-    _authService = AuthService();
+    // _authService = AuthService(); // Nicht mehr verwendet
   }
   
   @override

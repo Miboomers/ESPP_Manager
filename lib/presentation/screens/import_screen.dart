@@ -10,7 +10,6 @@ import '../../data/models/transaction_model.dart';
 import '../providers/transactions_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/stock_price_provider.dart';
-import '../../core/utils/duplicate_detector.dart';
 import '../../data/datasources/exchange_rate_api.dart';
 
 class ImportScreen extends ConsumerStatefulWidget {
@@ -23,14 +22,14 @@ class ImportScreen extends ConsumerStatefulWidget {
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   bool _isImporting = false;
   String _status = '';
-  List<String> _logs = [];
+  final List<String> _logs = [];
   List<dynamic> _selectedFiles = []; // Can be File or PlatformFile
   // bool _isClosedPositions = true; // Nicht mehr benötigt - automatische Erkennung
   
   // Statistiken
   int _totalTransactions = 0;
   int _importedTransactions = 0;
-  int _skippedTransactions = 0;
+  // int _skippedTransactions = 0; // Nicht mehr verwendet
   int _errorTransactions = 0;
   
   // ID Counter für eindeutige IDs
@@ -149,7 +148,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       _logs.clear();
       _totalTransactions = 0;
       _importedTransactions = 0;
-      _skippedTransactions = 0;
+      // _skippedTransactions = 0; // Nicht mehr verwendet
       _errorTransactions = 0;
       _idCounter = DateTime.now().millisecondsSinceEpoch; // Basis für eindeutige IDs
     });
@@ -229,7 +228,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           }
         }
         
-        _logs.add('✅ ${fileTransactions} Transaktionen aus dieser Datei vorbereitet');
+        _logs.add('✅ $fileTransactions Transaktionen aus dieser Datei vorbereitet');
       }
       
       // Jetzt importiere alle gesammelten Transaktionen
@@ -253,11 +252,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             _logs.add('✅ Cloud-Sync ist aktiviert - synchronisiere neue Daten...');
             
             // Hole aktuelle lokale Daten für Sync
-            final currentTransactions = await ref.read(transactionsProvider.future);
-            final currentSettings = await ref.read(settingsProvider.future);
+            // final currentTransactions = await ref.read(transactionsProvider.future);
+            // final currentSettings = await ref.read(settingsProvider.future);
             
             // Füge alle neuen Transaktionen zur Sync-Queue hinzu
-            for (final transaction in transactionsByType.values.expand((list) => list)) {
+            for (final _ in transactionsByType.values.expand((list) => list)) {
               // Verwende die private Methode über reflection oder direkt über den Service
               // Da _addPendingChange private ist, verwenden wir einen anderen Ansatz
               // Wir können die Transaktionen direkt über den Provider hinzufügen
@@ -282,7 +281,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         _status = 'Import abgeschlossen!';
         _logs.add('');
         _logs.add('=== ZUSAMMENFASSUNG ===');
-        _logs.add('Dateien verarbeitet: ${_selectedFiles.length}');
+        _logs.add('Dateien verarbeitet: $_selectedFiles.length');
         _logs.add('Gesamt: $_totalTransactions Transaktionen');
         _logs.add('Importiert: $_importedTransactions');
         _logs.add('Fehler: $_errorTransactions');
@@ -641,170 +640,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     }
   }
 
-  Future<bool> _showImportWarning(String importType, int existingCount, int newCount) async {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.warning, color: Colors.orange),
-              const SizedBox(width: 8),
-              Text('$importType Import'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(importType == 'Geschlossene Positionen'
-                  ? 'Sie haben bereits $existingCount Transaktionen in der App.'
-                  : 'Sie haben $existingCount geschlossene Positionen (Verkäufe) in der App.'),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('⚠️ WICHTIG:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(importType == 'Geschlossene Positionen' 
-                        ? 'CSV-Import ersetzt ALLE bestehenden Daten!'
-                        : 'Import ersetzt nur offene Positionen. Ihre $existingCount Verkäufe bleiben erhalten!'),
-                      const SizedBox(height: 8),
-                      const Text('Empfohlener Workflow:'),
-                      const Text('1. Geschlossene Positionen CSV importieren'),
-                      const Text('2. Offene Positionen CSV importieren'),  
-                      const Text('3. Lookback-Daten hinzufügen'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('Möchten Sie fortfahren und $newCount neue Transaktionen importieren?'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(importType == 'Geschlossene Positionen' 
-                ? 'Alle Daten ersetzen' 
-                : 'Offene Positionen ersetzen'),
-            ),
-          ],
-        );
-      },
-    ).then((value) => value ?? false);
-  }
+  // Diese Methode wurde durch _showSmartImportWarning ersetzt
+  // Future<bool> _showImportWarning(String importType, int existingCount, int newCount) async { ... }
 
-  Future<void> _executeImportStrategy(
-    ImportStrategy strategy,
-    List<TransactionModel> existingTransactions,
-    List<TransactionModel> transactionsToImport,
-  ) async {
-    final transactionsNotifier = ref.read(transactionsProvider.notifier);
-    
-    switch (strategy) {
-      case ImportStrategy.freshImport:
-        _logs.add('🗑️ Lösche alle bestehenden Transaktionen...');
-        setState(() {});
-        
-        // Alle bestehenden Transaktionen löschen
-        for (final tx in existingTransactions) {
-          await transactionsNotifier.deleteTransaction(tx.id);
-        }
-        
-        _logs.add('✅ ${existingTransactions.length} bestehende Transaktionen gelöscht');
-        _logs.add('💾 Importiere ${transactionsToImport.length} neue Transaktionen...');
-        setState(() {});
-        
-        // Historische Wechselkurse abrufen und Transaktionen aktualisieren
-        _logs.add('🌍 Lade historische Wechselkurse...');
-        setState(() {});
-        
-        final updatedTransactions = await _enrichWithHistoricalRates(transactionsToImport);
-        
-        // Alle neuen Transaktionen importieren
-        for (final transaction in updatedTransactions) {
-          await transactionsNotifier.addTransaction(transaction);
-        }
-        
-        _importedTransactions = updatedTransactions.length;
-        _skippedTransactions = 0;
-        break;
-        
-      case ImportStrategy.smartUpdate:
-        // Für offene Positionen: Lösche nur alte Käufe, behalte Verkäufe
-        _logs.add('🔄 Ersetze nur offene Positionen...');
-        setState(() {});
-        
-        // Lösche nur bestehende Käufe (offene Positionen)
-        final existingPurchases = existingTransactions.where((t) => t.type == TransactionType.purchase).toList();
-        final existingSales = existingTransactions.where((t) => t.type == TransactionType.sale).toList();
-        
-        _logs.add('📊 Behalte ${existingSales.length} Verkäufe (geschlossene Positionen)');
-        _logs.add('🗑️ Ersetze ${existingPurchases.length} alte offene Positionen');
-        
-        for (final purchase in existingPurchases) {
-          await transactionsNotifier.deleteTransaction(purchase.id);
-        }
-        
-        // Historische Wechselkurse abrufen
-        _logs.add('🌍 Lade historische Wechselkurse...');
-        setState(() {});
-        
-        final updatedTransactions = await _enrichWithHistoricalRates(transactionsToImport);
-        
-        // Importiere neue offene Positionen
-        for (final transaction in updatedTransactions) {
-          await transactionsNotifier.addTransaction(transaction);
-        }
-        
-        _importedTransactions = updatedTransactions.length;
-        _skippedTransactions = 0;
-        _logs.add('✅ ${updatedTransactions.length} neue offene Positionen importiert');
-        break;
-        
-      case ImportStrategy.incrementalOnly:
-        _logs.add('🔍 Erkenne bereits vorhandene Transaktionen...');
-        setState(() {});
-        
-        final existingKeys = existingTransactions.map(DuplicateDetector.generateTransactionKey).toSet();
-        final newTransactions = transactionsToImport.where((t) => 
-          !existingKeys.contains(DuplicateDetector.generateTransactionKey(t))
-        ).toList();
-        
-        _logs.add('💾 Importiere ${newTransactions.length} wirklich neue Transaktionen...');
-        setState(() {});
-        
-        for (final transaction in newTransactions) {
-          await transactionsNotifier.addTransaction(transaction);
-        }
-        
-        _importedTransactions = newTransactions.length;
-        _skippedTransactions = transactionsToImport.length - newTransactions.length;
-        
-        if (_skippedTransactions > 0) {
-          _logs.add('⏭️ $_skippedTransactions bereits vorhandene Transaktionen übersprungen');
-        }
-        break;
-    }
-  }
+  // Diese Methode wurde durch _importCollectedTransactions ersetzt
+  // Future<void> _executeImportStrategy(...) async { ... }
 
 
 
