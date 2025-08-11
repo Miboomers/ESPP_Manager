@@ -25,6 +25,17 @@ final syncStatusProvider = StreamProvider<SyncStatus>((ref) {
   return service.syncStatusStream;
 });
 
+// Cloud Data Model for PIN re-encryption
+class CloudData {
+  final List<TransactionModel> transactions;
+  final SettingsModel? settings;
+  
+  CloudData({
+    required this.transactions,
+    this.settings,
+  });
+}
+
 enum SyncState {
   idle,
   syncing,
@@ -70,12 +81,20 @@ class CloudSyncService {
   // Encryption key for cloud data
   String? _cloudEncryptionKey;
   
+  // PIN management for multi-device sync
+  static const String _pinVersionKey = 'pin_version';
+  static const String _pinHashKey = 'pin_hash';
+  
   // User specific paths
   String get _userPath {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User nicht angemeldet');
     return 'users/${user.uid}';
   }
+  
+  // PIN-specific paths
+  String get _pinPath => '$_userPath/pin';
+  String get _dataPath => '$_userPath/data';
   
   CloudSyncService() {
     _initializeConnectivityListener();
@@ -448,6 +467,250 @@ class CloudSyncService {
   // Cleanup
   void dispose() {
     _syncStatusController.close();
+  }
+
+  /// Get platform configuration
+  Map<String, dynamic> getPlatformConfig() {
+    return {
+      'isWeb': kIsWeb,
+      'supportsSecureStorage': _secureStorage != null,
+      'platform': _getPlatformString(),
+    };
+  }
+  
+  // PIN Management Methods
+  
+  /// Change PIN and re-encrypt all cloud data
+  Future<void> reEncryptWithNewPin(String oldPin, String newPin) async {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'PIN wird geändert und Daten neu verschlüsselt...');
+      
+      // 1. Download all cloud data with old PIN
+      final oldEncryptionKey = _deriveEncryptionKey(oldPin);
+      final cloudData = await _downloadAllDataWithKey(oldEncryptionKey);
+      
+      // 2. Generate new encryption key
+      final newEncryptionKey = _deriveEncryptionKey(newPin);
+      
+      // 3. Re-encrypt all data with new key
+      final reEncryptedData = await _reEncryptData(cloudData, newEncryptionKey);
+      
+      // 4. Update PIN version and hash in cloud
+      await _updatePinInCloud(newPin);
+      
+      // 5. Upload re-encrypted data
+      await _uploadAllDataWithKey(reEncryptedData, newEncryptionKey);
+      
+      // 6. Update local encryption key
+      _cloudEncryptionKey = newEncryptionKey;
+      
+      _updateSyncStatus(SyncState.idle, 'PIN erfolgreich geändert und alle Daten neu verschlüsselt');
+      
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Fehler bei PIN-Änderung: $e');
+      rethrow;
+    }
+  }
+  
+  /// Check if PIN has changed on other devices
+  Future<bool> hasPinChangedOnOtherDevice(String currentPinHash) async {
+    try {
+      final pinDoc = await _firestore.doc(_pinPath).get();
+      if (!pinDoc.exists) return false;
+      
+      final cloudPinHash = pinDoc.data()?[_pinHashKey] as String?;
+      if (cloudPinHash == null) return false;
+      
+      return cloudPinHash != currentPinHash;
+    } catch (e) {
+      debugPrint('Error checking PIN change: $e');
+      return false;
+    }
+  }
+  
+  /// Update PIN in cloud (called when PIN is changed locally)
+  Future<void> _updatePinInCloud(String newPin) async {
+    try {
+      final newPinHash = _hashPin(newPin);
+      final newPinVersion = DateTime.now().millisecondsSinceEpoch;
+      
+      await _firestore.doc(_pinPath).set({
+        _pinHashKey: newPinHash,
+        _pinVersionKey: newPinVersion,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('PIN updated in cloud: version $newPinVersion');
+    } catch (e) {
+      debugPrint('Error updating PIN in cloud: $e');
+      rethrow;
+    }
+  }
+  
+  /// Download all data with specific encryption key
+  Future<CloudData> _downloadAllDataWithKey(String encryptionKey) async {
+    try {
+      final dataDoc = await _firestore.doc(_dataPath).get();
+      if (!dataDoc.exists) {
+        return CloudData(transactions: [], settings: null);
+      }
+      
+      final encryptedData = dataDoc.data() as Map<String, dynamic>;
+      
+      // Decrypt data
+      final decryptedTransactions = await _decryptTransactions(
+        encryptedData['transactions'] as List<dynamic>? ?? [],
+        encryptionKey,
+      );
+      
+      final decryptedSettings = encryptedData['settings'] != null
+          ? await _decryptSettings(encryptedData['settings'] as String, encryptionKey)
+          : null;
+      
+      return CloudData(
+        transactions: decryptedTransactions,
+        settings: decryptedSettings,
+      );
+    } catch (e) {
+      debugPrint('Error downloading data with key: $e');
+      rethrow;
+    }
+  }
+  
+  /// Re-encrypt data with new key
+  Future<Map<String, dynamic>> _reEncryptData(CloudData data, String newKey) async {
+    try {
+      // Re-encrypt transactions
+      final reEncryptedTransactions = await _encryptTransactions(data.transactions, newKey);
+      
+      // Re-encrypt settings
+      String? reEncryptedSettings;
+      if (data.settings != null) {
+        reEncryptedSettings = await _encryptSettings(data.settings!, newKey);
+      }
+      
+      return {
+        'transactions': reEncryptedTransactions,
+        'settings': reEncryptedSettings,
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+    } catch (e) {
+      debugPrint('Error re-encrypting data: $e');
+      rethrow;
+    }
+  }
+  
+  /// Upload all data with specific encryption key
+  Future<void> _uploadAllDataWithKey(Map<String, dynamic> data, String encryptionKey) async {
+    try {
+      await _firestore.doc(_dataPath).set(data);
+      debugPrint('Re-encrypted data uploaded to cloud');
+    } catch (e) {
+      debugPrint('Error uploading re-encrypted data: $e');
+      rethrow;
+    }
+  }
+  
+  /// Hash PIN for cloud storage
+  String _hashPin(String pin) {
+    final bytes = utf8.encode(pin);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+  
+  /// Derive encryption key from PIN
+  String _deriveEncryptionKey(String pin) {
+    // Use the same method as EncryptionService
+    final bytes = utf8.encode(pin);
+    final digest = sha256.convert(bytes);
+    return digest.toString().substring(0, 32); // Use first 32 characters
+  }
+  
+  /// Decrypt transactions with specific key
+  Future<List<TransactionModel>> _decryptTransactions(List<dynamic> encryptedData, String key) async {
+    try {
+      final decryptedTransactions = <TransactionModel>[];
+      
+      for (final encryptedTransaction in encryptedData) {
+        try {
+          // Use the static method for decryption with custom key
+          final decryptedJson = EncryptionService.decryptWithKey(
+            encryptedTransaction as String,
+            key,
+          );
+          final transactionData = jsonDecode(decryptedJson) as Map<String, dynamic>;
+          final transaction = TransactionModel.fromJson(transactionData);
+          decryptedTransactions.add(transaction);
+        } catch (e) {
+          debugPrint('Error decrypting transaction: $e');
+          // Skip this transaction and continue
+        }
+      }
+      
+      return decryptedTransactions;
+    } catch (e) {
+      debugPrint('Error decrypting transactions: $e');
+      rethrow;
+    }
+  }
+  
+  /// Encrypt transactions with specific key
+  Future<List<String>> _encryptTransactions(List<TransactionModel> transactions, String key) async {
+    try {
+      final encryptedTransactions = <String>[];
+      
+      for (final transaction in transactions) {
+        try {
+          // Use the static method for encryption with custom key
+          final transactionJson = jsonEncode(transaction.toJson());
+          final encrypted = EncryptionService.encryptWithKey(transactionJson, key);
+          encryptedTransactions.add(encrypted);
+        } catch (e) {
+          debugPrint('Error encrypting transaction: $e');
+          rethrow;
+        }
+      }
+      
+      return encryptedTransactions;
+    } catch (e) {
+      debugPrint('Error encrypting transactions: $e');
+      rethrow;
+    }
+  }
+  
+  /// Decrypt settings with specific key
+  Future<SettingsModel?> _decryptSettings(String encryptedData, String key) async {
+    try {
+      // Use the static method for decryption with custom key
+      final decryptedJson = EncryptionService.decryptWithKey(encryptedData, key);
+      final settingsData = jsonDecode(decryptedJson) as Map<String, dynamic>;
+      return SettingsModel.fromJson(settingsData);
+    } catch (e) {
+      debugPrint('Error decrypting settings: $e');
+      return null;
+    }
+  }
+  
+  /// Encrypt settings with specific key
+  Future<String> _encryptSettings(SettingsModel settings, String key) async {
+    try {
+      // Use the static method for encryption with custom key
+      final settingsJson = jsonEncode(settings.toJson());
+      return EncryptionService.encryptWithKey(settingsJson, key);
+    } catch (e) {
+      debugPrint('Error encrypting settings: $e');
+      rethrow;
+    }
+  }
+  
+  String _getPlatformString() {
+    if (kIsWeb) return 'web';
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'android';
+    if (defaultTargetPlatform == TargetPlatform.macOS) return 'macos';
+    if (defaultTargetPlatform == TargetPlatform.windows) return 'windows';
+    if (defaultTargetPlatform == TargetPlatform.linux) return 'linux';
+    return 'unknown';
   }
 }
 

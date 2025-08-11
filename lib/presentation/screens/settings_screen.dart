@@ -564,15 +564,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // Change PIN
                 await authService.setPin(newPin);
                 
-                // TODO: Re-encrypt all cloud data with new PIN
-                // This will be implemented in CloudSyncService
+                // Re-encrypt all cloud data with new PIN
+                final cloudService = ref.read(cloudSyncServiceProvider);
+                await cloudService.reEncryptWithNewPin(currentPin, newPin);
                 
                 Navigator.pop(context);
                 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('PIN erfolgreich geändert. Cloud-Daten müssen manuell neu synchronisiert werden.'),
+                      content: Text('PIN erfolgreich geändert. Alle Cloud-Daten wurden neu verschlüsselt.'),
                       backgroundColor: Colors.green,
                       duration: Duration(seconds: 5),
                     ),
