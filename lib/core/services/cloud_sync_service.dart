@@ -191,7 +191,7 @@ class CloudSyncService {
     return _cloudEncryptionKey != null;
   }
   
-  // Enable cloud sync (first time)
+  // Enable cloud sync
   Future<void> enableCloudSync({
     required List<TransactionModel> localTransactions,
     required SettingsModel localSettings,
@@ -203,6 +203,10 @@ class CloudSyncService {
       await initializeForUser(pin);
       debugPrint('🔄 User initialized for sync');
       
+      // Initialize PIN path in cloud
+      await _initializePinPath(pin);
+      debugPrint('🔄 PIN path initialized in cloud');
+      
       // Upload all local data to cloud
       await _uploadAllData(localTransactions, localSettings);
       debugPrint('🔄 All data uploaded successfully');
@@ -211,6 +215,27 @@ class CloudSyncService {
     } catch (e) {
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
+    }
+  }
+  
+  /// Initialize PIN path in cloud
+  Future<void> _initializePinPath(String pin) async {
+    try {
+      final pinHash = _hashPin(pin);
+      final pinVersion = DateTime.now().millisecondsSinceEpoch;
+      
+      await _firestore.doc(_pinPath).set({
+        _pinHashKey: pinHash,
+        _pinVersionKey: pinVersion,
+        'updated_at': FieldValue.serverTimestamp(),
+        'created_at': FieldValue.serverTimestamp(),
+        'initial_setup': true,
+      });
+      
+      debugPrint('✅ PIN path initialized in cloud: $_pinPath');
+    } catch (e) {
+      debugPrint('❌ Error initializing PIN path: $e');
+      // Don't rethrow - this is not critical for sync
     }
   }
   
