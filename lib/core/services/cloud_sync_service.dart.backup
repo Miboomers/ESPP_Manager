@@ -73,8 +73,8 @@ class CloudSyncService {
   // User specific paths
   String get _userPath {
     final user = _auth.currentUser;
-    if (user == null) throw Exception('User nicht angemeldet');
-    return 'users/${user.uid}';
+    if (user?.uid == null) throw Exception('User nicht angemeldet oder UID fehlt');
+    return 'users/${user!.uid}';
   }
   
   CloudSyncService() {
@@ -107,7 +107,7 @@ class CloudSyncService {
     if (user == null) throw Exception('Nicht angemeldet');
     
     final uid = user.uid;
-    if (uid.isEmpty) throw Exception('User UID fehlt');
+    if (uid == null) throw Exception('User UID fehlt');
     
     // Generate user-specific encryption key from PIN + Salt
     final bytes = utf8.encode('$pin:$uid');
@@ -117,7 +117,7 @@ class CloudSyncService {
     // Store key securely
     await _secureStorage.write(
       key: 'cloud_encryption_key_$uid',
-      value: _cloudEncryptionKey!,
+      value: _cloudEncryptionKey,
     );
     
     debugPrint('✅ Cloud Sync für User initialisiert');
@@ -126,13 +126,10 @@ class CloudSyncService {
   // Check if cloud sync is enabled
   Future<bool> isCloudSyncEnabled() async {
     final user = _auth.currentUser;
-    if (user == null) return false;
-    
-    final uid = user.uid;
-    if (uid.isEmpty) return false;
+    if (user == null || user.uid == null) return false;
     
     _cloudEncryptionKey ??= await _secureStorage.read(
-      key: 'cloud_encryption_key_$uid',
+      key: 'cloud_encryption_key_${user.uid}',
     );
     
     return _cloudEncryptionKey != null;
@@ -164,13 +161,10 @@ class CloudSyncService {
   // Disable cloud sync
   Future<void> disableCloudSync() async {
     final user = _auth.currentUser;
-    if (user == null) return;
-    
-    final uid = user.uid;
-    if (uid.isEmpty) return;
+    if (user == null || user.uid == null) return;
     
     // Clear encryption key
-    await _secureStorage.delete(key: 'cloud_encryption_key_$uid');
+    await _secureStorage.delete(key: 'cloud_encryption_key_${user.uid}');
     _cloudEncryptionKey = null;
     
     // Optional: Delete cloud data
@@ -375,7 +369,6 @@ class CloudSyncService {
         
         processedChanges.add(change);
       } catch (e) {
-        debugPrint('❌ Error processing change: $e');
       }
     }
     

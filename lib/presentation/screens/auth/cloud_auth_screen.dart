@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/cloud_sync_service.dart';
 import '../../../core/security/mfa_service.dart';
+import '../../../core/security/auth_service.dart';
 import '../../providers/transactions_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -30,6 +31,15 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
   bool _obscureConfirmPassword = true;
   bool _trustDevice = false;
   int _trustDays = 30;
+  
+  // Auth service für PIN-Zugriff
+  late final AuthService _authService;
+  
+  @override
+  void initState() {
+    super.initState();
+    _authService = AuthService();
+  }
   
   @override
   void dispose() {
@@ -504,8 +514,37 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
       debugPrint('🔄 Starting cloud sync initialization...');
       final cloudService = ref.read(cloudSyncServiceProvider);
       
-      // Initialize encryption key first
-      await cloudService.initializeForUser('1234'); // TODO: Get actual PIN from secure storage
+      // Get actual PIN from secure storage
+      String? actualPin;
+      if (await _authService.isPinSet()) {
+        // Try to get PIN from secure storage
+        // Note: We can't directly read the PIN hash, so we'll need to ask user
+        // For now, we'll use a different approach
+        debugPrint('🔄 PIN is set, but we need to get it from user for cloud sync');
+        
+        // Show PIN input dialog
+        final pin = await _showPinInputDialog();
+        if (pin == null) {
+          debugPrint('❌ User cancelled PIN input');
+          return;
+        }
+        actualPin = pin;
+      } else {
+        debugPrint('❌ No PIN set - cannot initialize cloud sync');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bitte setzen Sie zuerst eine PIN in den Einstellungen'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Initialize encryption key with actual PIN
+      await cloudService.initializeForUser(actualPin);
+      debugPrint('🔄 User initialized for sync with PIN');
       
       // Check if cloud data exists
       debugPrint('🔄 Checking for existing cloud data...');
@@ -543,68 +582,143 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
           }
         } else {
           // No cloud data - upload local data
-          debugPrint('🔄 No cloud data found, uploading local data...');
-          await _uploadLocalDataToCloud(cloudService);
+          debugPrint('📤 No cloud data found, uploading local data...');
+          await _uploadLocalDataToCloud(actualPin);
         }
+        
       } catch (e) {
-        debugPrint('⚠️ Error checking cloud data: $e');
-        // If we can't access cloud data, try uploading local data
-        await _uploadLocalDataToCloud(cloudService);
+        debugPrint('❌ Error checking cloud data: $e');
+        // Try to upload local data instead
+        debugPrint('📤 Trying to upload local data to cloud...');
+        await _uploadLocalDataToCloud(actualPin);
       }
       
     } catch (e) {
-      debugPrint('❌ Cloud Sync Initialisierung fehlgeschlagen: $e');
-      debugPrint('Stack trace: ${StackTrace.current}');
-      rethrow;
+      debugPrint('❌ Cloud sync initialization failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cloud-Sync Fehler: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
   
-  Future<void> _uploadLocalDataToCloud(CloudSyncService cloudService) async {
-    // Get actual data from providers - use .future to wait for them
-    final transactionsAsync = ref.read(transactionsProvider);
-    final settingsAsync = ref.read(settingsProvider);
+  // Show PIN input dialog for cloud sync
+  Future<String?> _showPinInputDialog() async {
+    final pinController = TextEditingController();
     
-    debugPrint('🔄 Getting local transactions and settings...');
-    
-    await transactionsAsync.when(
-      data: (transactions) async {
-        debugPrint('🔄 Local transactions loaded: ${transactions.length}');
-        await settingsAsync.when(
-          data: (settings) async {
-            debugPrint('🔄 Local settings loaded, uploading to cloud...');
-            // Initialize cloud sync with real data
-            await cloudService.enableCloudSync(
-              localTransactions: transactions,
-              localSettings: settings,
-              pin: '1234', // TODO: Get actual PIN from secure storage
-            );
-            debugPrint('🔥 Local data upload complete: ${transactions.length} transactions!');
-            
-            if (mounted && transactions.isNotEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${transactions.length} lokale Transaktionen in Cloud gespeichert'),
-                  backgroundColor: Colors.blue,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            }
-          },
-          loading: () async {
-            debugPrint('⚠️ Settings noch nicht geladen - warten...');
-          },
-          error: (error, stack) async {
-            debugPrint('❌ Settings Fehler: $error');
-          },
-        );
-      },
-      loading: () async {
-        debugPrint('⚠️ Transaktionen noch nicht geladen - warten...');
-      },
-      error: (error, stack) async {
-        debugPrint('❌ Transaktions Fehler: $error');
-      },
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('PIN für Cloud-Sync'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Bitte geben Sie Ihre PIN ein, um die Cloud-Synchronisation zu aktivieren.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              decoration: const InputDecoration(
+                labelText: 'PIN',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final pin = pinController.text.trim();
+              if (pin.isNotEmpty) {
+                // Verify PIN
+                final isValid = await _authService.verifyPin(pin);
+                if (isValid) {
+                  Navigator.pop(context, pin);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Falsche PIN'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Bestätigen'),
+          ),
+        ],
+      ),
     );
+  }
+  
+  // Upload local data to cloud
+  Future<void> _uploadLocalDataToCloud(String pin) async {
+    try {
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      
+      // Get local data
+      final transactionsAsync = ref.read(transactionsProvider);
+      final settingsAsync = ref.read(settingsProvider);
+      
+      await transactionsAsync.when(
+        data: (transactions) async {
+          debugPrint('🔄 Local transactions loaded: ${transactions.length}');
+          await settingsAsync.when(
+            data: (settings) async {
+              debugPrint('🔄 Local settings loaded, uploading to cloud...');
+              // Initialize cloud sync with real data
+              await cloudService.enableCloudSync(
+                localTransactions: transactions,
+                localSettings: settings,
+                pin: pin, // Use actual PIN
+              );
+              debugPrint('🔥 Local data upload complete: ${transactions.length} transactions!');
+              
+              if (mounted && transactions.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${transactions.length} lokale Transaktionen in Cloud gespeichert'),
+                    backgroundColor: Colors.blue,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+            loading: () async {
+              debugPrint('⚠️ Settings noch nicht geladen - warten...');
+            },
+            error: (error, stack) async {
+              debugPrint('❌ Settings Fehler: $error');
+            },
+          );
+        },
+        loading: () async {
+          debugPrint('⚠️ Transaktionen noch nicht geladen - warten...');
+        },
+        error: (error, stack) async {
+          debugPrint('❌ Transaktions Fehler: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('❌ Failed to upload local data: $e');
+      rethrow;
+    }
   }
   
   Future<void> _handleGoogleSignIn() async {
