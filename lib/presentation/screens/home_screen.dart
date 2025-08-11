@@ -5,6 +5,7 @@ import '../providers/transactions_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/stock_price_provider.dart';
 import '../../data/models/transaction_model.dart';
+import '../../data/models/settings_model.dart';
 import '../../core/utils/number_formatter.dart';
 import '../../core/utils/app_icons.dart';
 import '../../core/services/cloud_sync_service.dart';
@@ -28,10 +29,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  /// Führt eine Cloud-Synchronisierung beim App-Start durch
+  /// Führt eine intelligente Cloud-Synchronisierung beim App-Start durch
   Future<void> _performStartupCloudSync() async {
     try {
-      debugPrint('🚀 Starting startup cloud sync...');
+      debugPrint('🚀 Starting intelligent startup cloud sync...');
       
       // Prüfe ob Cloud-Sync aktiviert ist
       final cloudService = ref.read(cloudSyncServiceProvider);
@@ -45,25 +46,93 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       
       debugPrint('📊 Local data: ${transactions.length} transactions, settings available: ${settings != null}');
       
-      // 🔄 Vollständige Startup-Synchronisierung
-      // 1. Alle lokalen Transaktionen in die Cloud hochladen
-      for (final transaction in transactions) {
-        await cloudService.syncTransaction(transaction);
+      // 🔄 Intelligente Startup-Synchronisierung basierend auf lokalem Datenstand
+      if (transactions.isEmpty && settings == null) {
+        // 🆕 App ist leer → Lade alle Cloud-Daten herunter
+        debugPrint('📥 App is empty - downloading all cloud data...');
+        
+        try {
+          final cloudData = await cloudService.downloadAllData();
+          debugPrint('✅ Downloaded ${cloudData.transactions.length} transactions from cloud');
+          
+          // Aktualisiere lokale Provider mit Cloud-Daten
+          await _updateLocalProvidersWithCloudData(cloudData);
+          
+          debugPrint('✅ Local providers updated with cloud data');
+          
+          // Zeige Benutzerbenachrichtigung
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ ${cloudData.transactions.length} Transaktionen aus der Cloud geladen'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          
+        } catch (e) {
+          debugPrint('⚠️ Failed to download cloud data: $e');
+          
+          // Zeige Fehlerbenachrichtigung
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ Cloud-Synchronisierung fehlgeschlagen: $e'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+        
+      } else {
+        // 🔄 App hat lokale Daten → Bidirektionale Synchronisierung
+        debugPrint('🔄 App has local data - performing bidirectional sync...');
+        
+        // 1. Alle lokalen Transaktionen in die Cloud hochladen
+        for (final transaction in transactions) {
+          await cloudService.syncTransaction(transaction);
+        }
+        
+        // 2. Einstellungen synchronisieren
+        if (settings != null) {
+          await cloudService.syncSettings(settings);
+        }
+        
+        // 3. Alle ausstehenden Änderungen synchronisieren
+        await cloudService.syncPendingChanges();
+        
+        debugPrint('✅ Bidirectional sync completed - ${transactions.length} transactions synced');
       }
-      
-      // 2. Einstellungen synchronisieren
-      if (settings != null) {
-        await cloudService.syncSettings(settings);
-      }
-      
-      // 3. Alle ausstehenden Änderungen synchronisieren
-      await cloudService.syncPendingChanges();
-      
-      debugPrint('✅ Startup cloud sync completed - ${transactions.length} transactions synced');
       
     } catch (e) {
       debugPrint('⚠️ Startup cloud sync failed: $e');
       // Nicht kritisch - App funktioniert auch ohne Cloud-Sync
+    }
+  }
+
+  /// Aktualisiert lokale Provider mit Cloud-Daten
+  Future<void> _updateLocalProvidersWithCloudData(
+    ({List<TransactionModel> transactions, SettingsModel? settings}) cloudData,
+  ) async {
+    try {
+      debugPrint('💾 Updating local providers with cloud data...');
+      
+      // Aktualisiere Transaktionen
+      final transactionsNotifier = ref.read(transactionsProvider.notifier);
+      await transactionsNotifier.restoreFromCloud(cloudData.transactions);
+      
+      // Aktualisiere Einstellungen
+      if (cloudData.settings != null) {
+        final settingsNotifier = ref.read(settingsProvider.notifier);
+        await settingsNotifier.updateSettings(cloudData.settings!);
+      }
+      
+      debugPrint('✅ Local providers successfully updated');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to update local providers: $e');
     }
   }
 
