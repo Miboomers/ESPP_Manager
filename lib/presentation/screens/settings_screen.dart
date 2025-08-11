@@ -175,6 +175,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: Text('Daten werden automatisch synchronisiert'),
           ),
           
+          // Manueller Sync
+          ListTile(
+            leading: const Icon(Icons.sync, color: Colors.blue),
+            title: const Text('Manuell synchronisieren'),
+            subtitle: const Text('Sofortige Synchronisierung aller Daten'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => _performManualSync(context),
+          ),
+          
           // Cloud Data Overview
           ListTile(
             leading: const Icon(Icons.cloud_queue),
@@ -1096,6 +1105,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// Führt eine manuelle Cloud-Synchronisierung durch
+  Future<void> _performManualSync(BuildContext context) async {
+    try {
+      // Zeige Lade-Indikator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 8),
+                Text('Synchronisiere mit der Cloud...'),
+              ],
+            ),
+            duration: Duration(seconds: 30), // Länger für Sync-Vorgang
+          ),
+        );
+      }
+
+      // Hole Cloud-Service
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      
+      // Prüfe ob Cloud-Sync aktiviert ist
+      final syncStatus = await cloudService.syncStatusStream.first;
+      if (syncStatus.state == SyncState.idle) {
+        // Starte manuelle Synchronisierung
+        await cloudService.syncPendingChanges();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Manuelle Synchronisierung erfolgreich abgeschlossen!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Cloud-Sync läuft bereits (${_getSyncStatusText(syncStatus.state)})'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Manuelle Synchronisierung fehlgeschlagen: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _deleteAllData(BuildContext context) async {

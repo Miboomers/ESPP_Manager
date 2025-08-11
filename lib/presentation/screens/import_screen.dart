@@ -234,7 +234,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       // Jetzt importiere alle gesammelten Transaktionen
       await _importCollectedTransactions(transactionsByType);
 
-      // 🔄 Automatische Cloud-Synchronisierung nach erfolgreichem Import
+      // 🔄 SOFORTIGE Cloud-Synchronisierung nach erfolgreichem Import
+      // Warte NICHT auf Provider-Updates - synchronisiere direkt!
       bool isCloudSyncEnabled = false;
       if (_importedTransactions > 0) {
         _logs.add('');
@@ -251,23 +252,31 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           if (isCloudSyncEnabled) {
             _logs.add('✅ Cloud-Sync ist aktiviert - synchronisiere neue Daten...');
             
-            // Hole aktuelle lokale Daten für Sync
-            // final currentTransactions = await ref.read(transactionsProvider.future);
-            // final currentSettings = await ref.read(settingsProvider.future);
-            
-            // Füge alle neuen Transaktionen zur Sync-Queue hinzu
-            for (final _ in transactionsByType.values.expand((list) => list)) {
-              // Verwende die private Methode über reflection oder direkt über den Service
-              // Da _addPendingChange private ist, verwenden wir einen anderen Ansatz
-              // Wir können die Transaktionen direkt über den Provider hinzufügen
-              // und der Cloud-Sync wird automatisch getriggert
+            // 🔄 Direkte Cloud-Synchronisierung der neuen Transaktionen
+            try {
+              final allNewTransactions = transactionsByType.values.expand((list) => list).toList();
+              
+              // Lade alle neuen Transaktionen direkt in die Cloud
+              for (final transaction in allNewTransactions) {
+                await cloudService.syncTransaction(transaction);
+                _logs.add('   → Transaktion ${transaction.id} in Cloud hochgeladen');
+              }
+              
+              // Lade alle ausstehenden Änderungen
+              await cloudService.syncPendingChanges();
+              
+              _logs.add('✅ Cloud-Synchronisierung erfolgreich abgeschlossen!');
+              _logs.add('   → ${allNewTransactions.length} Transaktionen direkt in die Cloud übertragen');
+              
+            } catch (e) {
+              _logs.add('❌ Fehler bei Cloud-Synchronisierung: $e');
+              _logs.add('   → Versuche alternative Sync-Methode...');
+              
+              // Alternative: Warte kurz und versuche es nochmal
+              await Future.delayed(const Duration(seconds: 2));
+              await cloudService.syncPendingChanges();
+              _logs.add('✅ Alternative Sync-Methode abgeschlossen');
             }
-            
-            // Starte manuelle Synchronisierung
-            await cloudService.syncPendingChanges();
-            
-            _logs.add('✅ Cloud-Synchronisierung erfolgreich abgeschlossen!');
-            _logs.add('   → ${transactionsByType.values.expand((list) => list).length} Transaktionen in die Cloud übertragen');
           } else {
             _logs.add('ℹ️ Cloud-Sync ist nicht aktiviert - überspringe Synchronisierung');
           }

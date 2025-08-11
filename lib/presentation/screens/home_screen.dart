@@ -119,9 +119,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       debugPrint('💾 Updating local providers with cloud data...');
       
-      // Aktualisiere Transaktionen
+      // Aktualisiere Transaktionen - lösche alle lokalen und füge Cloud-Daten hinzu
       final transactionsNotifier = ref.read(transactionsProvider.notifier);
-      await transactionsNotifier.restoreFromCloud(cloudData.transactions);
+      
+      // Hole aktuelle lokale Transaktionen
+      final currentTransactions = await ref.read(transactionsProvider.future);
+      
+      // Lösche alle lokalen Transaktionen
+      for (final transaction in currentTransactions) {
+        await transactionsNotifier.deleteTransaction(transaction.id);
+      }
+      
+      // Füge alle Cloud-Transaktionen hinzu
+      for (final transaction in cloudData.transactions) {
+        await transactionsNotifier.addTransaction(transaction);
+      }
       
       // Aktualisiere Einstellungen
       if (cloudData.settings != null) {
