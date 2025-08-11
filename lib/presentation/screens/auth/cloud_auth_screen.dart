@@ -1,9 +1,12 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../../core/services/cloud_sync_service.dart';
-import '../../../core/security/mfa_service.dart';
 import '../../../core/security/auth_service.dart';
+import '../../../core/security/cloud_password_service.dart';
+import '../../../core/security/mfa_service.dart';
 import '../../providers/transactions_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -525,13 +528,30 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
             data: (settings) async {
               debugPrint('🔄 Local settings loaded, initializing cloud sync...');
               
-              // Get stored PIN for cloud sync
-              final storedPin = await _authService.getStoredPin();
-              if (storedPin == null) {
+              // Get stored cloud password for cloud sync
+              final cloudPasswordService = ref.read(cloudPasswordServiceProvider);
+              final isPasswordSet = await cloudPasswordService.isCloudPasswordSet();
+              
+              if (!isPasswordSet) {
+                // Show cloud password setup dialog
+                final cloudPassword = await _showCloudPasswordSetupDialog();
+                if (cloudPassword == null) {
+                  debugPrint('❌ User cancelled cloud password setup');
+                  return;
+                }
+                
+                // Set the cloud password
+                await cloudPasswordService.setCloudPassword(cloudPassword);
+                debugPrint('✅ Cloud password set successfully');
+              }
+              
+              // Get the cloud password for sync
+              final cloudPassword = await cloudPasswordService.getCloudPassword();
+              if (cloudPassword == null) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Keine PIN gesetzt. Bitte setzen Sie zuerst eine PIN in den Einstellungen.'),
+                      content: Text('Cloud-Passwort konnte nicht abgerufen werden.'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -539,21 +559,21 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
                 return;
               }
               
-              // Use stored App-PIN for cloud sync (no need to ask again)
-              debugPrint('🔑 Using stored App-PIN for cloud sync');
+              // Use stored Cloud-Passwort for cloud sync
+              debugPrint('🔑 Using Cloud-Passwort for cloud sync');
               
-              // Initialize cloud sync with stored PIN
+              // Initialize cloud sync with cloud password
               await cloudService.enableCloudSync(
                 localTransactions: transactions,
                 localSettings: settings,
-                pin: storedPin, // Use stored App-PIN
+                cloudPassword: cloudPassword, // Use cloud password
               );
-              debugPrint('🔥 Cloud sync initialized with App-PIN!');
+              debugPrint('🔥 Cloud sync initialized with Cloud-Passwort!');
               
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Cloud-Synchronisation mit App-PIN aktiviert'),
+                    content: Text('Cloud-Synchronisation mit Cloud-Passwort aktiviert'),
                     backgroundColor: Colors.green,
                     duration: const Duration(seconds: 3),
                   ),
@@ -599,6 +619,46 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
     // TODO: Implement Apple Sign-In
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Apple Sign-In noch nicht implementiert')),
+    );
+  }
+
+  Future<String?> _showCloudPasswordSetupDialog() async {
+    final passwordController = TextEditingController();
+    
+    return await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Cloud-Passwort festlegen'),
+          content: TextField(
+            controller: passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Neues Cloud-Passwort',
+              hintText: 'Mindestens 8 Zeichen',
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final password = passwordController.text;
+                if (password.length < 8) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passwort muss mindestens 8 Zeichen haben.')),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(password);
+              },
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -13,6 +13,7 @@ import 'conditional_imports.dart';
 import '../../data/models/transaction_model.dart';
 import '../../data/models/settings_model.dart';
 import '../security/encryption_service.dart';
+import '../security/cloud_password_service.dart';
 
 // Provider für Cloud Sync Service
 final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
@@ -99,44 +100,26 @@ class CloudSyncService {
   final _syncStatusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
   
-  // Offline Queue
-  final List<PendingChange> _pendingChanges = [];
-  
   // Current sync status
   SyncStatus _currentStatus = SyncStatus(
     state: SyncState.idle,
     lastSync: DateTime.now(),
   );
   
-  // Encryption key for cloud data
+  // Cloud encryption key
   String? _cloudEncryptionKey;
   
-  // PIN management for multi-device sync
-  static const String _pinVersionKey = 'pin_version';
-  static const String _pinHashKey = 'pin_hash';
+  // Pending changes
+  final List<Map<String, dynamic>> _pendingChanges = [];
   
   // User specific paths
   String get _userPath {
     final user = _auth.currentUser;
-    debugPrint('🔍 _userPath getter called');
-    debugPrint('🔍 _auth.currentUser: $user');
-    if (user == null) {
-      debugPrint('❌ _auth.currentUser is null!');
-      throw Exception('User nicht angemeldet');
-    }
-    final uid = user.uid;
-    debugPrint('🔍 User UID: $uid');
-    if (uid.isEmpty) {
-      debugPrint('❌ User UID is empty!');
-      throw Exception('User UID ist leer');
-    }
-    final path = 'users/$uid';
-    debugPrint('🔍 Generated path: $path');
-    return path;
+    if (user == null) throw Exception('User nicht angemeldet');
+    return 'users/${user.uid}';
   }
   
-  // PIN-specific paths
-  String get _pinPath => '$_userPath/pin';
+  // Data paths
   String get _dataPath => '$_userPath/data';
   
   // Legacy paths for backward compatibility
@@ -168,17 +151,15 @@ class CloudSyncService {
   }
   
   // Initialize cloud sync for user
-  Future<void> initializeForUser(String pin) async {
+  Future<void> initializeForUser(String cloudPassword) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Nicht angemeldet');
     
     final uid = user.uid;
     if (uid.isEmpty) throw Exception('User UID fehlt');
     
-    // Generate user-specific encryption key from PIN + Salt
-    final bytes = utf8.encode('$pin:$uid');
-    final hash = sha256.convert(bytes);
-    _cloudEncryptionKey = base64.encode(hash.bytes);
+    // Generate user-specific encryption key from cloud password + UID
+    _cloudEncryptionKey = _generateEncryptionKey(cloudPassword, uid);
     
     // Store key securely
     await _secureStorage.write(
@@ -187,6 +168,13 @@ class CloudSyncService {
     );
     
     debugPrint('✅ Cloud Sync für User initialisiert');
+  }
+  
+  /// Generate encryption key from cloud password and user UID
+  String _generateEncryptionKey(String cloudPassword, String userUid) {
+    final bytes = utf8.encode('$cloudPassword:$userUid');
+    final hash = sha256.convert(bytes);
+    return base64.encode(hash.bytes);
   }
   
   // Check if cloud sync is enabled
@@ -208,13 +196,13 @@ class CloudSyncService {
   Future<void> enableCloudSync({
     required List<TransactionModel> localTransactions,
     required SettingsModel localSettings,
-    required String pin,
+    required String cloudPassword,
   }) async {
     try {
       debugPrint('🚀 Starting cloud sync activation...');
       debugPrint('🔍 Local transactions count: ${localTransactions.length}');
       debugPrint('🔍 Local settings available: ${localSettings != null}');
-      debugPrint('🔍 PIN provided: ${pin.isNotEmpty ? 'Yes' : 'No'}');
+      debugPrint('🔍 Cloud password provided: ${cloudPassword.isNotEmpty ? 'Yes' : 'No'}');
       
       _updateSyncStatus(SyncState.syncing, 'Cloud Sync wird aktiviert...');
       
@@ -226,20 +214,8 @@ class CloudSyncService {
         debugPrint('🔍 User email: ${currentUser.email}');
       }
       
-      await initializeForUser(pin);
+      await initializeForUser(cloudPassword);
       debugPrint('🔄 User initialized for sync');
-      
-      // Initialize PIN path in cloud - CRITICAL STEP
-      debugPrint('🔑 Initializing PIN path for cloud sync...');
-      await _initializePinPath(pin);
-      debugPrint('✅ PIN path successfully initialized in cloud');
-      
-      // Verify PIN path exists before proceeding
-      final pinDoc = await _firestore.doc(_pinPath).get();
-      if (!pinDoc.exists) {
-        throw Exception('PIN path was not created despite successful initialization');
-      }
-      debugPrint('✅ PIN path verified before data upload');
       
       // Upload all local data to cloud
       debugPrint('📤 Starting data upload to cloud...');
@@ -247,7 +223,7 @@ class CloudSyncService {
       debugPrint('✅ All data uploaded successfully');
       
       _updateSyncStatus(SyncState.idle, 'Cloud Sync aktiviert');
-      debugPrint('🎉 Cloud sync successfully enabled with PIN path');
+      debugPrint('🎉 Cloud sync successfully enabled');
       
     } catch (e) {
       debugPrint('❌ Critical error during cloud sync initialization: $e');
@@ -256,167 +232,6 @@ class CloudSyncService {
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
     }
-  }
-  
-  /// Initialize PIN path in cloud
-  Future<void> _initializePinPath(String pin) async {
-    try {
-      debugPrint('🔍 Starting PIN path initialization...');
-      
-      // Debug user authentication state
-      final currentUser = _auth.currentUser;
-      debugPrint('🔍 Current user: $currentUser');
-      if (currentUser != null) {
-        debugPrint('🔍 User UID: ${currentUser.uid}');
-        debugPrint('🔍 User email: ${currentUser.email}');
-      }
-      
-      // Debug path generation
-      debugPrint('🔍 User path: $_userPath');
-      debugPrint('🔍 PIN path: $_pinPath');
-      
-      // Validate path before proceeding
-      if (_pinPath.isEmpty || _pinPath.contains('null')) {
-        debugPrint('❌ Invalid PIN path detected: $_pinPath');
-        throw Exception('Invalid PIN path: $_pinPath');
-      }
-      
-      // Additional Firebase path validation
-      if (!_pinPath.startsWith('users/') || _pinPath.split('/').length != 3) {
-        debugPrint('❌ Invalid Firebase path structure: $_pinPath');
-        debugPrint('❌ Expected format: users/{uid}/pin');
-        debugPrint('❌ Actual format: ${_pinPath.split('/')}');
-        throw Exception('Invalid Firebase path structure: $_pinPath');
-      }
-      
-      // Validate UID part
-      final pathParts = _pinPath.split('/');
-      final uid = pathParts[1];
-      if (uid.isEmpty || uid.length < 10) {
-        debugPrint('❌ Invalid UID in path: $uid');
-        throw Exception('Invalid UID in path: $uid');
-      }
-      
-      debugPrint('✅ Firebase path validation passed');
-      
-      // Clean up any existing invalid PIN path first
-      await _cleanupInvalidPinPath();
-      
-      final pinHash = _hashPin(pin);
-      final pinVersion = DateTime.now().millisecondsSinceEpoch;
-      
-      debugPrint('🔍 PIN hash: ${pinHash.substring(0, 8)}...');
-      debugPrint('🔍 PIN version: $pinVersion');
-      
-      final pinData = {
-        _pinHashKey: pinHash,
-        _pinVersionKey: pinVersion,
-        'updated_at': FieldValue.serverTimestamp(),
-        'created_at': FieldValue.serverTimestamp(),
-        'initial_setup': true,
-      };
-      
-      debugPrint('🔍 PIN data prepared: $pinData');
-      debugPrint('🔍 About to call _firestore.doc($_pinPath).set()...');
-      debugPrint('🔍 Final path being used: $_pinPath');
-      
-      // Try to create the document
-      await _firestore.doc(_pinPath).set(pinData);
-      debugPrint('✅ PIN document created in cloud');
-      
-      // Wait a moment for Firebase to process
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Verify the document was actually created
-      final verifyDoc = await _firestore.doc(_pinPath).get();
-      if (verifyDoc.exists) {
-        debugPrint('✅ PIN document verified in cloud');
-        final verifyData = verifyDoc.data()!;
-        debugPrint('🔍 Verified data: $verifyData');
-      } else {
-        throw Exception('PIN document was not created despite successful response');
-      }
-      
-      // Test reading the document
-      try {
-        await _firestore.doc(_pinPath).get();
-        debugPrint('✅ PIN document can be read successfully');
-      } catch (e) {
-        throw Exception('PIN document cannot be read after creation: $e');
-      }
-      
-    } catch (e) {
-      debugPrint('❌ Error initializing PIN path: $e');
-      debugPrint('❌ Error type: ${e.runtimeType}');
-      debugPrint('❌ Error stack: ${StackTrace.current}');
-      
-      // Re-throw this error as it's critical for sync
-      rethrow;
-    }
-  }
-  
-  /// Clean up any existing invalid PIN path
-  Future<void> _cleanupInvalidPinPath() async {
-    try {
-      debugPrint('🧹 Cleaning up any existing invalid PIN path...');
-      debugPrint('🧹 PIN path to clean: $_pinPath');
-      
-      // Validate path before proceeding with cleanup
-      if (_pinPath.isEmpty || _pinPath.contains('null')) {
-        debugPrint('⚠️ Skipping cleanup - invalid PIN path: $_pinPath');
-        return;
-      }
-      
-      // Additional Firebase path validation for cleanup
-      if (!_pinPath.startsWith('users/') || _pinPath.split('/').length != 3) {
-        debugPrint('⚠️ Skipping cleanup - invalid Firebase path structure: $_pinPath');
-        return;
-      }
-      
-      // Check if PIN document exists
-      final existingPinDoc = await _firestore.doc(_pinPath).get();
-      
-      if (existingPinDoc.exists) {
-        debugPrint('🧹 Existing PIN document found, attempting to delete...');
-        
-        try {
-          // Try to delete the existing document
-          await _firestore.doc(_pinPath).delete();
-          debugPrint('✅ Existing PIN document deleted successfully');
-          
-          // Wait a moment for Firebase to process
-          await Future.delayed(const Duration(milliseconds: 300));
-          
-        } catch (deleteError) {
-          debugPrint('⚠️ Could not delete existing PIN document: $deleteError');
-          debugPrint('⚠️ This might be a permissions issue');
-        }
-      } else {
-        debugPrint('🧹 No existing PIN document found');
-      }
-      
-    } catch (e) {
-      debugPrint('⚠️ Error during PIN path cleanup: $e');
-      // Don't rethrow - cleanup errors are not critical
-    }
-  }
-  
-  // Disable cloud sync
-  Future<void> disableCloudSync() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    
-    final uid = user.uid;
-    if (uid.isEmpty) return;
-    
-    // Clear encryption key
-    await _secureStorage.delete(key: 'cloud_encryption_key_$uid');
-    _cloudEncryptionKey = null;
-    
-    // Optional: Delete cloud data
-    // await _deleteAllCloudData();
-    
-    _updateSyncStatus(SyncState.idle, 'Cloud Sync deaktiviert');
   }
   
   // Upload all data (initial sync)
@@ -524,13 +339,7 @@ class CloudSyncService {
     final connectivityResult = await _connectivity.checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
       // Add to offline queue
-      _pendingChanges.add(PendingChange(
-        id: transaction.id,
-        type: ChangeType.transaction,
-        data: transaction.toJson(),
-        deleted: deleted,
-        timestamp: DateTime.now(),
-      ));
+      _addPendingChange('transaction', transaction.id, transaction.toJson());
       _updateSyncStatus(SyncState.offline, null);
       return;
     }
@@ -556,13 +365,7 @@ class CloudSyncService {
       
     } catch (e) {
       // Add to offline queue on error
-      _pendingChanges.add(PendingChange(
-        id: transaction.id,
-        type: ChangeType.transaction,
-        data: transaction.toJson(),
-        deleted: deleted,
-        timestamp: DateTime.now(),
-      ));
+      _addPendingChange('transaction', transaction.id, transaction.toJson());
     }
   }
   
@@ -573,13 +376,7 @@ class CloudSyncService {
     // Check connectivity
     final connectivityResult = await _connectivity.checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      _pendingChanges.add(PendingChange(
-        id: 'settings',
-        type: ChangeType.settings,
-        data: settings.toJson(),
-        deleted: false,
-        timestamp: DateTime.now(),
-      ));
+      _addPendingChange('settings', 'settings', settings.toJson());
       _updateSyncStatus(SyncState.offline, null);
       return;
     }
@@ -593,13 +390,7 @@ class CloudSyncService {
       
       debugPrint('✅ Settings synchronisiert');
     } catch (e) {
-      _pendingChanges.add(PendingChange(
-        id: 'settings',
-        type: ChangeType.settings,
-        data: settings.toJson(),
-        deleted: false,
-        timestamp: DateTime.now(),
-      ));
+      _addPendingChange('settings', 'settings', settings.toJson());
     }
   }
   
@@ -607,61 +398,41 @@ class CloudSyncService {
   Future<void> syncPendingChanges() async {
     if (_pendingChanges.isEmpty) return;
     
-    _updateSyncStatus(
-      SyncState.syncing,
-      '${_pendingChanges.length} ausstehende Änderungen...',
-    );
-    
-    final batch = _firestore.batch();
-    final processedChanges = <PendingChange>[];
-    
-    for (final change in _pendingChanges) {
-      try {
-        if (change.type == ChangeType.transaction) {
-          final docRef = _firestore.doc('$_userPath/transactions/${change.id}');
-          
-          if (change.deleted) {
-            batch.update(docRef, {
-              'deleted': true,
-              'deletedAt': Timestamp.fromDate(change.timestamp),
-            });
-          } else {
-            batch.set(docRef, {
-              'data': _encryptData(change.data),
-              'type': 'transaction',
-              'lastModified': Timestamp.fromDate(change.timestamp),
-              'deleted': false,
-            });
-          }
-        } else if (change.type == ChangeType.settings) {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'Änderungen werden synchronisiert...');
+      
+      final batch = _firestore.batch();
+      
+      for (final change in _pendingChanges) {
+        final changeType = change['type'] as String;
+        final changeId = change['id'] as String;
+        
+        if (changeType == 'transaction') {
+          final docRef = _firestore.doc('$_userPath/transactions/$changeId');
+          batch.set(docRef, change['data'] as Map<String, dynamic>);
+        } else if (changeType == 'settings') {
           final docRef = _firestore.doc('$_userPath/data/settings');
-          batch.set(docRef, {
-            'data': _encryptData(change.data),
-            'type': 'settings',
-            'lastModified': Timestamp.fromDate(change.timestamp),
-          });
+          batch.set(docRef, change['data'] as Map<String, dynamic>);
         }
-        
-        processedChanges.add(change);
-      } catch (e) {
-        debugPrint('❌ Error processing change: $e');
       }
+      
+      await batch.commit();
+      _pendingChanges.clear();
+      
+      _updateSyncStatus(SyncState.idle, 'Änderungen synchronisiert');
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Fehler: $e');
     }
-    
-    if (processedChanges.isNotEmpty) {
-      try {
-        await batch.commit();
-        
-        // Remove processed changes
-        for (final change in processedChanges) {
-          _pendingChanges.remove(change);
-        }
-        
-        _updateSyncStatus(SyncState.idle, 'Sync abgeschlossen');
-      } catch (e) {
-        _updateSyncStatus(SyncState.error, 'Sync fehlgeschlagen');
-      }
-    }
+  }
+  
+  // Add change to pending queue
+  void _addPendingChange(String type, String id, Map<String, dynamic> data) {
+    _pendingChanges.add({
+      'type': type,
+      'id': id,
+      'data': data,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
   }
   
   // Real-time sync listener
@@ -748,8 +519,8 @@ class CloudSyncService {
       // Get settings info
       final settingsInfo = await _getSettingsInfo();
       
-      // Get PIN info
-      final pinInfo = await _getPinInfo();
+      // Get cloud password info
+      final passwordInfo = await _getCloudPasswordInfo();
       
       // Get last sync info
       final lastSyncInfo = await _getLastSyncInfo();
@@ -757,7 +528,7 @@ class CloudSyncService {
       return CloudDataOverview(
         transactions: transactionsInfo,
         settings: settingsInfo,
-        pinInfo: pinInfo,
+        pinInfo: passwordInfo, // Reuse pinInfo field for password info
         lastSync: lastSyncInfo,
       );
     } catch (e) {
@@ -845,10 +616,10 @@ class CloudSyncService {
     }
   }
   
-  /// Get PIN info from cloud
-  Future<CloudDataInfo> _getPinInfo() async {
+  /// Get cloud password info
+  Future<CloudDataInfo> _getCloudPasswordInfo() async {
     try {
-      debugPrint('🔍 Getting PIN info from cloud...');
+      debugPrint('🔍 Getting cloud password info...');
       
       // Check if user is authenticated
       final user = _auth.currentUser;
@@ -861,53 +632,27 @@ class CloudSyncService {
       }
       
       debugPrint('🔍 User authenticated: ${user.uid}');
-      debugPrint('🔍 PIN path: $_pinPath');
       
-      // Check if PIN document exists
-      final pinDoc = await _firestore.doc(_pinPath).get();
+      // Check if cloud password is set
+      final cloudPasswordService = CloudPasswordService();
+      final isPasswordSet = await cloudPasswordService.isCloudPasswordSet();
       
-      if (!pinDoc.exists) {
-        debugPrint('❌ PIN document does not exist');
+      if (!isPasswordSet) {
+        debugPrint('❌ Cloud password not set');
         return CloudDataInfo(
-          status: 'Keine PIN-Info',
-          details: 'PIN-Informationen wurden noch nicht in der Cloud gespeichert',
+          status: 'Kein Cloud-Passwort gesetzt',
+          details: 'Cloud-Passwort wird bei der ersten Cloud-Sync gesetzt',
         );
       }
       
-      debugPrint('✅ PIN document exists, reading data...');
-      
-      final data = pinDoc.data()!;
-      debugPrint('🔍 PIN data: $data');
-      
-      final version = data[_pinVersionKey] as int?;
-      final lastTime = data['updated_at'] as Timestamp?;
-      String? lastModified;
-      
-      if (lastTime != null) {
-        lastModified = '${lastTime.toDate().day}.${lastTime.toDate().month}.${lastTime.toDate().year} ${lastTime.toDate().hour}:${lastTime.toDate().minute}';
-      }
-      
-      debugPrint('✅ PIN info successfully retrieved');
+      debugPrint('✅ Cloud password is set');
       
       return CloudDataInfo(
         status: 'Verfügbar',
-        count: version,
-        lastModified: lastModified,
-        details: 'PIN-Version $version in der Cloud gespeichert',
+        details: 'Cloud-Passwort ist für Datenverschlüsselung gesetzt',
       );
     } catch (e) {
-      debugPrint('❌ Error getting PIN info: $e');
-      debugPrint('❌ Error type: ${e.runtimeType}');
-      
-      // Provide more specific error information
-      if (e.toString().contains('Invalid argument(s): A document path must point to a valid document')) {
-        debugPrint('❌ Document path error detected');
-        return CloudDataInfo(
-          status: 'PIN-Pfad nicht verfügbar',
-          details: 'PIN-Informationen werden bei der ersten PIN-Änderung erstellt',
-        );
-      }
-      
+      debugPrint('❌ Error getting cloud password info: $e');
       return CloudDataInfo(
         status: 'Fehler beim Laden',
         details: 'Fehler: $e',
@@ -934,74 +679,7 @@ class CloudSyncService {
     }
   }
   
-  // PIN Management Methods
-  
-  /// Change PIN and re-encrypt all cloud data
-  Future<void> reEncryptWithNewPin(String oldPin, String newPin) async {
-    try {
-      _updateSyncStatus(SyncState.syncing, 'PIN wird geändert und Daten neu verschlüsselt...');
-      
-      // 1. Download all cloud data with old PIN
-      final oldEncryptionKey = _deriveEncryptionKey(oldPin);
-      final cloudData = await _downloadAllDataWithKey(oldEncryptionKey);
-      
-      // 2. Generate new encryption key
-      final newEncryptionKey = _deriveEncryptionKey(newPin);
-      
-      // 3. Re-encrypt all data with new key
-      final reEncryptedData = await _reEncryptData(cloudData, newEncryptionKey);
-      
-      // 4. Update PIN version and hash in cloud
-      await _updatePinInCloud(newPin);
-      
-      // 5. Upload re-encrypted data
-      await _uploadAllDataWithKey(reEncryptedData, newEncryptionKey);
-      
-      // 6. Update local encryption key
-      _cloudEncryptionKey = newEncryptionKey;
-      
-      _updateSyncStatus(SyncState.idle, 'PIN erfolgreich geändert und alle Daten neu verschlüsselt');
-      
-    } catch (e) {
-      _updateSyncStatus(SyncState.error, 'Fehler bei PIN-Änderung: $e');
-      rethrow;
-    }
-  }
-  
-  /// Check if PIN has changed on other devices
-  Future<bool> hasPinChangedOnOtherDevice(String currentPinHash) async {
-    try {
-      final pinDoc = await _firestore.doc(_pinPath).get();
-      if (!pinDoc.exists) return false;
-      
-      final cloudPinHash = pinDoc.data()?[_pinHashKey] as String?;
-      if (cloudPinHash == null) return false;
-      
-      return cloudPinHash != currentPinHash;
-    } catch (e) {
-      debugPrint('Error checking PIN change: $e');
-      return false;
-    }
-  }
-  
-  /// Update PIN in cloud (called when PIN is changed locally)
-  Future<void> _updatePinInCloud(String newPin) async {
-    try {
-      final newPinHash = _hashPin(newPin);
-      final newPinVersion = DateTime.now().millisecondsSinceEpoch;
-      
-      await _firestore.doc(_pinPath).set({
-        _pinHashKey: newPinHash,
-        _pinVersionKey: newPinVersion,
-        'updated_at': FieldValue.serverTimestamp(),
-      });
-      
-      debugPrint('PIN updated in cloud: version $newPinVersion');
-    } catch (e) {
-      debugPrint('Error updating PIN in cloud: $e');
-      rethrow;
-    }
-  }
+  // PIN Management Methods - REMOVED, replaced with Cloud Password
   
   /// Download all data with specific encryption key
   Future<CloudData> _downloadAllDataWithKey(String encryptionKey) async {
@@ -1087,22 +765,71 @@ class CloudSyncService {
     }
   }
   
-  /// Re-encrypt data with new key
+  // Cloud Sync Management Methods
+  
+  /// Disable cloud sync
+  Future<void> disableCloudSync() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    
+    final uid = user.uid;
+    if (uid.isEmpty) return;
+    
+    // Clear encryption key
+    await _secureStorage.delete(key: 'cloud_encryption_key_$uid');
+    _cloudEncryptionKey = null;
+    
+    // Clear cloud password
+    final cloudPasswordService = CloudPasswordService();
+    await cloudPasswordService.clearCloudPassword();
+    
+    _updateSyncStatus(SyncState.idle, 'Cloud Sync deaktiviert');
+  }
+  
+  /// Change cloud password and re-encrypt all cloud data
+  Future<void> reEncryptWithNewPassword(String oldPassword, String newPassword) async {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'Cloud-Passwort wird geändert und Daten neu verschlüsselt...');
+      
+      // 1. Download all cloud data with old password
+      final oldEncryptionKey = _generateEncryptionKey(oldPassword, _auth.currentUser!.uid);
+      final cloudData = await _downloadAllDataWithKey(oldEncryptionKey);
+      
+      // 2. Generate new encryption key
+      final newEncryptionKey = _generateEncryptionKey(newPassword, _auth.currentUser!.uid);
+      
+      // 3. Re-encrypt all data with new key
+      final reEncryptedData = await _reEncryptData(cloudData, newEncryptionKey);
+      
+      // 4. Update cloud password
+      final cloudPasswordService = CloudPasswordService();
+      await cloudPasswordService.changeCloudPassword(oldPassword, newPassword);
+      
+      // 5. Upload re-encrypted data
+      await _uploadAllDataWithKey(reEncryptedData, newEncryptionKey);
+      
+      // 6. Update local encryption key
+      _cloudEncryptionKey = newEncryptionKey;
+      
+      _updateSyncStatus(SyncState.idle, 'Cloud-Passwort erfolgreich geändert und alle Daten neu verschlüsselt');
+      
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Fehler bei Cloud-Passwort-Änderung: $e');
+      rethrow;
+    }
+  }
+  
+  /// Re-encrypt data with new encryption key
   Future<Map<String, dynamic>> _reEncryptData(CloudData data, String newKey) async {
     try {
-      // Re-encrypt transactions
       final reEncryptedTransactions = await _encryptTransactions(data.transactions, newKey);
-      
-      // Re-encrypt settings
-      String? reEncryptedSettings;
-      if (data.settings != null) {
-        reEncryptedSettings = await _encryptSettings(data.settings!, newKey);
-      }
+      final reEncryptedSettings = data.settings != null 
+          ? await _encryptSettings(data.settings!, newKey)
+          : null;
       
       return {
         'transactions': reEncryptedTransactions,
         'settings': reEncryptedSettings,
-        'updated_at': FieldValue.serverTimestamp(),
       };
     } catch (e) {
       debugPrint('Error re-encrypting data: $e');
@@ -1113,15 +840,25 @@ class CloudSyncService {
   /// Upload all data with specific encryption key
   Future<void> _uploadAllDataWithKey(Map<String, dynamic> data, String encryptionKey) async {
     try {
+      final batch = _firestore.batch();
+      
       // Upload to new unified structure
-      await _firestore.doc(_dataPath).set(data);
+      final dataRef = _firestore.doc(_dataPath);
+      batch.set(dataRef, {
+        'transactions': data['transactions'],
+        'settings': data['settings'],
+        'lastModified': FieldValue.serverTimestamp(),
+        'encryption_version': '2.0',
+      });
+      
+      await batch.commit();
+      debugPrint('✅ Data uploaded to unified structure');
       
       // Also upload to legacy structure for backward compatibility
       await _uploadToLegacyStructure(data, encryptionKey);
       
-      debugPrint('Re-encrypted data uploaded to cloud (both structures)');
     } catch (e) {
-      debugPrint('Error uploading re-encrypted data: $e');
+      debugPrint('Error uploading data with key: $e');
       rethrow;
     }
   }
@@ -1129,9 +866,12 @@ class CloudSyncService {
   /// Upload to legacy structure for backward compatibility
   Future<void> _uploadToLegacyStructure(Map<String, dynamic> data, String encryptionKey) async {
     try {
+      final batch = _firestore.batch();
+      
       // Upload settings to legacy path
       if (data['settings'] != null) {
-        await _firestore.doc(_legacySettingsPath).set({
+        final settingsRef = _firestore.doc(_legacySettingsPath);
+        batch.set(settingsRef, {
           'data': data['settings'],
           'type': 'settings',
           'lastModified': FieldValue.serverTimestamp(),
@@ -1139,37 +879,23 @@ class CloudSyncService {
       }
       
       // Upload transactions to legacy path
-      final transactions = data['transactions'] as List<dynamic>? ?? [];
-      for (final transaction in transactions) {
-        final transactionId = transaction['id'] ?? DateTime.now().millisecondsSinceEpoch.toString();
-        await _firestore.doc('$_legacyTransactionsPath/$transactionId').set({
-          'data': transaction,
+      final transactions = data['transactions'] as List<String>;
+      for (int i = 0; i < transactions.length; i++) {
+        final transRef = _firestore.doc('$_legacyTransactionsPath/legacy_$i');
+        batch.set(transRef, {
+          'data': transactions[i],
           'type': 'transaction',
           'lastModified': FieldValue.serverTimestamp(),
           'deleted': false,
         });
       }
       
+      await batch.commit();
       debugPrint('Data also uploaded to legacy structure for compatibility');
     } catch (e) {
       debugPrint('Warning: Could not upload to legacy structure: $e');
       // Don't rethrow - this is just for compatibility
     }
-  }
-  
-  /// Hash PIN for cloud storage
-  String _hashPin(String pin) {
-    final bytes = utf8.encode(pin);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-  
-  /// Derive encryption key from PIN
-  String _deriveEncryptionKey(String pin) {
-    // Use the same method as EncryptionService
-    final bytes = utf8.encode(pin);
-    final digest = sha256.convert(bytes);
-    return digest.toString().substring(0, 32); // Use first 32 characters
   }
   
   /// Decrypt transactions with specific key
@@ -1258,26 +984,4 @@ class CloudSyncService {
     if (defaultTargetPlatform == TargetPlatform.linux) return 'linux';
     return 'unknown';
   }
-}
-
-// Pending change model
-class PendingChange {
-  final String id;
-  final ChangeType type;
-  final Map<String, dynamic> data;
-  final bool deleted;
-  final DateTime timestamp;
-
-  PendingChange({
-    required this.id,
-    required this.type,
-    required this.data,
-    required this.deleted,
-    required this.timestamp,
-  });
-}
-
-enum ChangeType {
-  transaction,
-  settings,
 }

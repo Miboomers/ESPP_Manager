@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/security/auth_service.dart';
+import '../../core/security/cloud_password_service.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../../data/models/settings_model.dart';
 import '../providers/settings_provider.dart';
@@ -584,19 +585,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
               
               try {
-                // Change PIN
-                await authService.setPin(newPin);
+                // Change cloud password
+                final cloudPasswordService = CloudPasswordService();
+                await cloudPasswordService.changeCloudPassword(currentPin, newPin);
                 
-                // Re-encrypt all cloud data with new PIN
+                // Re-encrypt all cloud data with new password
                 final cloudService = ref.read(cloudSyncServiceProvider);
-                await cloudService.reEncryptWithNewPin(currentPin, newPin);
+                await cloudService.reEncryptWithNewPassword(currentPin, newPin);
                 
                 Navigator.pop(context);
                 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('PIN erfolgreich geändert. Alle Cloud-Daten wurden neu verschlüsselt.'),
+                      content: Text('Cloud-Passwort erfolgreich geändert. Alle Cloud-Daten wurden neu verschlüsselt.'),
                       backgroundColor: Colors.green,
                       duration: Duration(seconds: 5),
                     ),
@@ -606,7 +608,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Fehler beim Ändern der PIN: $e'),
+                      content: Text('Fehler beim Ändern des Cloud-Passworts: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
