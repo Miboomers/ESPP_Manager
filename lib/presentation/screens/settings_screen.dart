@@ -463,47 +463,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('PIN ändern'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Bitte geben Sie Ihre aktuelle PIN und die neue PIN ein.\n\nAlle Cloud-Daten werden mit der neuen PIN neu verschlüsselt.',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: currentPinController,
-              decoration: const InputDecoration(
-                labelText: 'Aktuelle PIN',
-                border: OutlineInputBorder(),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Bitte geben Sie Ihre aktuelle PIN und die neue PIN ein.\n\nAlle Cloud-Daten werden mit der neuen PIN neu verschlüsselt.',
+                style: TextStyle(fontSize: 14),
               ),
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              maxLength: 6,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: newPinController,
-              decoration: const InputDecoration(
-                labelText: 'Neue PIN',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 20),
+              TextField(
+                controller: currentPinController,
+                decoration: const InputDecoration(
+                  labelText: 'Aktuelle PIN',
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6,
               ),
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              maxLength: 6,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmPinController,
-              decoration: const InputDecoration(
-                labelText: 'Neue PIN bestätigen',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 16),
+              TextField(
+                controller: newPinController,
+                decoration: const InputDecoration(
+                  labelText: 'Neue PIN',
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6,
               ),
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              maxLength: 6,
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: confirmPinController,
+                decoration: const InputDecoration(
+                  labelText: 'Neue PIN bestätigen',
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                maxLength: 6,
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
         actions: [
           TextButton(
