@@ -1,11 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:html';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// Conditional import für Web-spezifische Funktionen
+import '../services/conditional_imports.dart';
 
 class MFAService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -98,25 +101,52 @@ class MFAService {
   Future<String> generateDeviceFingerprint() async {
     final StringBuffer fingerprint = StringBuffer();
     
-    if (Platform.isIOS) {
-      final iosInfo = await _deviceInfo.iosInfo;
-      fingerprint.write('${iosInfo.model}-${iosInfo.systemVersion}');
-      fingerprint.write('-${iosInfo.identifierForVendor}');
-    } else if (Platform.isAndroid) {
-      final androidInfo = await _deviceInfo.androidInfo;
-      fingerprint.write('${androidInfo.model}-${androidInfo.version.release}');
-      fingerprint.write('-${androidInfo.id}');
-    } else if (Platform.isMacOS) {
-      final macInfo = await _deviceInfo.macOsInfo;
-      fingerprint.write('${macInfo.model}-${macInfo.majorVersion}');
-      fingerprint.write('-${macInfo.systemGUID}');
-    } else if (Platform.isWindows) {
-      final windowsInfo = await _deviceInfo.windowsInfo;
-      fingerprint.write('${windowsInfo.computerName}-${windowsInfo.numberOfCores}');
-      fingerprint.write('-${windowsInfo.systemMemoryInMegabytes}');
+    if (kIsWeb) {
+      // Web-spezifische Fingerprint-Generierung
+      fingerprint.write('web-${DateTime.now().millisecondsSinceEpoch}');
+      fingerprint.write('-${_getWebUserAgent()}');
+    } else {
+      // Native Plattform-spezifische Fingerprint-Generierung
+      try {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final iosInfo = await _deviceInfo.iosInfo;
+          fingerprint.write('${iosInfo.model}-${iosInfo.systemVersion}');
+          fingerprint.write('-${iosInfo.identifierForVendor}');
+        } else if (defaultTargetPlatform == TargetPlatform.android) {
+          final androidInfo = await _deviceInfo.androidInfo;
+          fingerprint.write('${androidInfo.model}-${androidInfo.version.release}');
+          fingerprint.write('-${androidInfo.id}');
+        } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+          final macInfo = await _deviceInfo.macOsInfo;
+          fingerprint.write('${macInfo.model}-${macInfo.majorVersion}');
+          fingerprint.write('-${macInfo.systemGUID}');
+        } else if (defaultTargetPlatform == TargetPlatform.windows) {
+          final windowsInfo = await _deviceInfo.windowsInfo;
+          fingerprint.write('${windowsInfo.computerName}-${windowsInfo.numberOfCores}');
+          fingerprint.write('-${windowsInfo.systemMemoryInMegabytes}');
+        } else {
+          // Fallback für andere Plattformen
+          fingerprint.write('unknown-${DateTime.now().millisecondsSinceEpoch}');
+        }
+      } catch (e) {
+        // Fallback bei Fehlern
+        fingerprint.write('error-${DateTime.now().millisecondsSinceEpoch}');
+      }
     }
     
     return sha256.convert(utf8.encode(fingerprint.toString())).toString();
+  }
+
+  String _getWebUserAgent() {
+    if (kIsWeb) {
+      // Web-spezifische User-Agent Extraktion
+      try {
+        return getWebUserAgent();
+      } catch (e) {
+        return 'web-unknown';
+      }
+    }
+    return 'unknown';
   }
 
   Future<void> trustDevice({
@@ -129,6 +159,7 @@ class MFAService {
     final deviceId = await getDeviceId();
     final fingerprint = await generateDeviceFingerprint();
     final deviceName = customName ?? await _getDefaultDeviceName();
+    final platform = _getPlatformString();
 
     await _firestore
         .collection('users')
@@ -139,7 +170,7 @@ class MFAService {
       'deviceName': deviceName,
       'deviceId': deviceId,
       'fingerprint': fingerprint,
-      'platform': Platform.operatingSystem,
+      'platform': platform,
       'trustedUntil': DateTime.now().add(Duration(days: days)),
       'addedAt': FieldValue.serverTimestamp(),
       'lastUsed': FieldValue.serverTimestamp(),
@@ -147,6 +178,21 @@ class MFAService {
 
     // Speichere Fingerprint lokal für Verifikation
     await _secureStorage.write(key: _deviceFingerprintKey, value: fingerprint);
+  }
+
+  String _getPlatformString() {
+    if (kIsWeb) {
+      return 'web';
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return 'ios';
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'android';
+    } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return 'macos';
+    } else if (defaultTargetPlatform == TargetPlatform.windows) {
+      return 'windows';
+    }
+    return 'unknown';
   }
 
   Future<bool> isDeviceTrusted() async {
@@ -260,20 +306,29 @@ class MFAService {
   }
 
   Future<String> _getDefaultDeviceName() async {
-    if (Platform.isIOS) {
-      final iosInfo = await _deviceInfo.iosInfo;
-      return '${iosInfo.name} (iOS)';
-    } else if (Platform.isAndroid) {
-      final androidInfo = await _deviceInfo.androidInfo;
-      return '${androidInfo.model} (Android)';
-    } else if (Platform.isMacOS) {
-      final macInfo = await _deviceInfo.macOsInfo;
-      return '${macInfo.computerName} (macOS)';
-    } else if (Platform.isWindows) {
-      final windowsInfo = await _deviceInfo.windowsInfo;
-      return '${windowsInfo.computerName} (Windows)';
+    if (kIsWeb) {
+      return 'Web Browser';
+    } else {
+      try {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final iosInfo = await _deviceInfo.iosInfo;
+          return '${iosInfo.name} (iOS)';
+        } else if (defaultTargetPlatform == TargetPlatform.android) {
+          final androidInfo = await _deviceInfo.androidInfo;
+          return '${androidInfo.model} (Android)';
+        } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+          final macInfo = await _deviceInfo.macOsInfo;
+          return '${macInfo.computerName} (macOS)';
+        } else if (defaultTargetPlatform == TargetPlatform.windows) {
+          final windowsInfo = await _deviceInfo.windowsInfo;
+          return '${windowsInfo.computerName} (Windows)';
+        } else {
+          return 'Unbekanntes Gerät';
+        }
+      } catch (e) {
+        return 'Unbekanntes Gerät';
+      }
     }
-    return 'Unbekanntes Gerät';
   }
 }
 
@@ -310,6 +365,8 @@ class TrustedDevice {
         return '💻';
       case 'windows':
         return '🖥️';
+      case 'web':
+        return '🌐';
       default:
         return '📲';
     }
@@ -325,6 +382,8 @@ class TrustedDevice {
       return '${difference.inDays} Tage';
     } else if (difference.inHours > 0) {
       return '${difference.inHours} Stunden';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} Minuten';
     } else {
       return '${difference.inMinutes} Minuten';
     }

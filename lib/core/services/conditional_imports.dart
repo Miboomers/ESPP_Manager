@@ -95,3 +95,21 @@ class NativeSecureStorage implements SecureStorageInterface {
     }
   }
 }
+
+// Web-spezifische Hilfsfunktionen
+String getWebUserAgent() {
+  if (kIsWeb) {
+    try {
+      // ignore: avoid_web_libraries_in_flutter
+      return _getWebUserAgentInternal();
+    } catch (e) {
+      return 'web-unknown';
+    }
+  }
+  return 'unknown';
+}
+
+// Diese Funktion wird nur für Web-Compilation implementiert
+String _getWebUserAgentInternal() {
+  throw UnsupportedError('Web User Agent wird auf dieser Plattform nicht unterstützt');
+}
