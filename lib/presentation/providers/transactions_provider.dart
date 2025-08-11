@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/transaction_model.dart';
 import '../../data/repositories/transactions_repository.dart';
 import '../../core/utils/transaction_matcher.dart';
+import '../../core/services/cloud_sync_service.dart';
 
 final transactionsRepositoryProvider = Provider<TransactionsRepository>((ref) {
   return TransactionsRepository();
@@ -34,6 +35,15 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       final matchedTransactions = TransactionMatcher.matchSalesWithPurchases(transactions);
       
       state = AsyncValue.data(matchedTransactions);
+      
+      // 🔄 Automatische Cloud-Synchronisierung
+      try {
+        final cloudService = ref.read(cloudSyncServiceProvider);
+        await cloudService.syncPendingChanges();
+      } catch (e) {
+        // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
+        // Daten wurden lokal gespeichert
+      }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
     }
@@ -45,6 +55,15 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       await repository.saveTransaction(transaction);
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
+      
+      // 🔄 Automatische Cloud-Synchronisierung
+      try {
+        final cloudService = ref.read(cloudSyncServiceProvider);
+        await cloudService.syncPendingChanges();
+      } catch (e) {
+        // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
+        // Daten wurden lokal gespeichert
+      }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
     }
@@ -56,6 +75,15 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       await repository.deleteTransaction(id);
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
+      
+      // 🔄 Automatische Cloud-Synchronisierung
+      try {
+        final cloudService = ref.read(cloudSyncServiceProvider);
+        await cloudService.syncPendingChanges();
+      } catch (e) {
+        // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
+        // Daten wurden lokal gespeichert
+      }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
     }

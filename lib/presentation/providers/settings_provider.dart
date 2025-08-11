@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/settings_model.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../core/services/cloud_sync_service.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository();
@@ -28,6 +29,15 @@ class SettingsNotifier extends AsyncNotifier<SettingsModel> {
     try {
       await repository.saveSettings(settings);
       state = AsyncValue.data(settings);
+      
+      // 🔄 Automatische Cloud-Synchronisierung
+      try {
+        final cloudService = ref.read(cloudSyncServiceProvider);
+        await cloudService.syncPendingChanges();
+      } catch (e) {
+        // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
+        // Einstellungen wurden lokal gespeichert
+      }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
     }
