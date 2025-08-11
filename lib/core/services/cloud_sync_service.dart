@@ -113,7 +113,16 @@ class CloudSyncService {
   
   // 📊 Daten-Validierung
   final Map<String, String> _dataHashes = {};
+  
+  // 🔄 Callback für Provider-Updates
+  Function(List<TransactionModel>, SettingsModel?)? _onDataUpdateCallback;
   Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
+  
+  /// Setzt den Callback für Provider-Updates
+  void setDataUpdateCallback(Function(List<TransactionModel>, SettingsModel?) callback) {
+    _onDataUpdateCallback = callback;
+    debugPrint('✅ Data update callback set');
+  }
   
   // Current sync status
   SyncStatus _currentStatus = SyncStatus(
@@ -1240,12 +1249,24 @@ class CloudSyncService {
     try {
       debugPrint('💾 Updating local data with merged data...');
       
-      // Hier würden wir normalerweise die lokalen Provider aktualisieren
-      // Da wir das nicht direkt können, markieren wir es für den Benutzer
+      // WICHTIG: Verwende den Callback um die lokalen Provider zu aktualisieren
+      if (_onDataUpdateCallback != null) {
+        debugPrint('🔄 Calling data update callback...');
+        _onDataUpdateCallback!(mergedTransactions, mergedSettings);
+        debugPrint('✅ Data update callback executed');
+      } else {
+        debugPrint('⚠️ No data update callback set - Provider werden nicht aktualisiert!');
+        // Fallback: Sende eine globale Benachrichtigung
+        _updateSyncStatus(
+          SyncState.idle, 
+          '${mergedTransactions.length} Transaktionen verfügbar - App wird aktualisiert'
+        );
+      }
+      
       debugPrint('✅ Local data update completed');
       debugPrint('   → ${mergedTransactions.length} transactions available');
       debugPrint('   → Settings updated');
-      debugPrint('   → Please refresh the app to see merged data');
+      debugPrint('   → Provider update callback executed');
       
     } catch (e) {
       debugPrint('❌ Error updating local data: $e');

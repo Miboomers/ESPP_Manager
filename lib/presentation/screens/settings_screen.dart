@@ -1130,6 +1130,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // Hole Cloud-Service
       final cloudService = ref.read(cloudSyncServiceProvider);
       
+      // WICHTIG: Setze den Callback für Provider-Updates
+      cloudService.setDataUpdateCallback((transactions, settings) async {
+        debugPrint('🔄 Data update callback received: ${transactions.length} transactions');
+        
+        try {
+          // Aktualisiere lokale Provider mit den neuen Daten
+          final transactionsNotifier = ref.read(transactionsProvider.notifier);
+          
+          // Hole aktuelle lokale Transaktionen
+          final currentTransactions = await ref.read(transactionsProvider.future);
+          debugPrint('🔍 Current local transactions: ${currentTransactions.length}');
+          
+          // Lösche alle lokalen Transaktionen
+          debugPrint('🗑️ Deleting ${currentTransactions.length} local transactions...');
+          for (final transaction in currentTransactions) {
+            await transactionsNotifier.deleteTransaction(transaction.id);
+          }
+          debugPrint('✅ All local transactions deleted');
+          
+          // Füge alle neuen Transaktionen hinzu
+          debugPrint('➕ Adding ${transactions.length} new transactions...');
+          for (final transaction in transactions) {
+            await transactionsNotifier.addTransaction(transaction);
+          }
+          debugPrint('✅ All new transactions added');
+          
+          // Aktualisiere Einstellungen
+          if (settings != null) {
+            debugPrint('⚙️ Updating settings...');
+            final settingsNotifier = ref.read(settingsProvider.notifier);
+            await settingsNotifier.updateSettings(settings);
+            debugPrint('✅ Settings updated');
+          }
+          
+          // Force Provider-Refresh
+          debugPrint('🔄 Forcing provider refresh...');
+          ref.invalidate(transactionsProvider);
+          ref.invalidate(settingsProvider);
+          
+          debugPrint('✅ Provider update completed successfully');
+          
+        } catch (e) {
+          debugPrint('❌ Error in data update callback: $e');
+        }
+      });
+      
       // Prüfe ob Cloud-Sync aktiviert ist
       final syncStatus = await cloudService.syncStatusStream.first;
       if (syncStatus.state == SyncState.idle) {
