@@ -225,6 +225,11 @@ class CloudSyncService {
       debugPrint('🔍 User path: $_userPath');
       debugPrint('🔍 PIN path: $_pinPath');
       
+      // Validate path before proceeding
+      if (_pinPath.isEmpty || _pinPath.contains('null')) {
+        throw Exception('Invalid PIN path: $_pinPath');
+      }
+      
       final pinHash = _hashPin(pin);
       final pinVersion = DateTime.now().millisecondsSinceEpoch;
       
@@ -241,22 +246,38 @@ class CloudSyncService {
       
       debugPrint('🔍 PIN data prepared: $pinData');
       
+      // Try to create the document
       await _firestore.doc(_pinPath).set(pinData);
+      debugPrint('✅ PIN document created in cloud');
       
-      debugPrint('✅ PIN path initialized in cloud: $_pinPath');
+      // Wait a moment for Firebase to process
+      await Future.delayed(const Duration(milliseconds: 500));
       
-      // Verify the document was created
+      // Verify the document was actually created
       final verifyDoc = await _firestore.doc(_pinPath).get();
       if (verifyDoc.exists) {
         debugPrint('✅ PIN document verified in cloud');
+        final verifyData = verifyDoc.data()!;
+        debugPrint('🔍 Verified data: $verifyData');
       } else {
-        debugPrint('❌ PIN document not found after creation');
+        throw Exception('PIN document was not created despite successful response');
       }
+      
+      // Test reading the document
+      try {
+        await _firestore.doc(_pinPath).get();
+        debugPrint('✅ PIN document can be read successfully');
+      } catch (e) {
+        throw Exception('PIN document cannot be read after creation: $e');
+      }
+      
     } catch (e) {
       debugPrint('❌ Error initializing PIN path: $e');
       debugPrint('❌ Error type: ${e.runtimeType}');
       debugPrint('❌ Error stack: ${StackTrace.current}');
-      // Don't rethrow - this is not critical for sync
+      
+      // Re-throw this error as it's critical for sync
+      rethrow;
     }
   }
   
