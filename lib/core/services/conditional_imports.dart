@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Conditional import für FlutterSecureStorage (nur für native Plattformen)
+// Conditional import für native Implementation
 // ignore: avoid_web_libraries_in_flutter
-import 'package:flutter_secure_storage/flutter_secure_storage.dart' if (dart.library.html) 'dart:html';
+import 'conditional_imports_native.dart' if (dart.library.html) 'conditional_imports_web.dart';
 
 // Conditional imports für Secure Storage
 // Web-Plattform verwendet SharedPreferences
@@ -42,14 +42,24 @@ class NativeSecureStorage implements SecureStorageInterface {
   dynamic _storage;
   
   dynamic get storage {
-    if (_storage == null) {
-      // Conditional import für FlutterSecureStorage
-      if (!kIsWeb) {
-        // ignore: avoid_web_libraries_in_flutter
-        _storage = const FlutterSecureStorage();
-      }
+    if (_storage == null && !kIsWeb) {
+      // Nur für native Plattformen
+      _storage = _createSecureStorage();
     }
     return _storage;
+  }
+  
+  // Factory-Methode für FlutterSecureStorage
+  dynamic _createSecureStorage() {
+    if (kIsWeb) {
+      return null;
+    }
+    return _createNativeSecureStorage();
+  }
+  
+  // Diese Methode wird nur für native Plattformen kompiliert
+  dynamic _createNativeSecureStorage() {
+    return createNativeSecureStorage();
   }
   
   @override
