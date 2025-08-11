@@ -116,12 +116,29 @@ class CloudSyncService {
   
   // 🔄 Callback für Provider-Updates
   Function(List<TransactionModel>, SettingsModel?)? _onDataUpdateCallback;
+  
+  // 💾 Temporäre Daten für späteren Abruf
+  Map<String, dynamic>? _tempMergedData;
+  
   Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
   
   /// Setzt den Callback für Provider-Updates
   void setDataUpdateCallback(Function(List<TransactionModel>, SettingsModel?) callback) {
     _onDataUpdateCallback = callback;
     debugPrint('✅ Data update callback set');
+    
+    // WICHTIG: Wenn temporäre Daten vorhanden sind, führe den Callback sofort aus
+    if (_tempMergedData != null) {
+      debugPrint('🔄 Executing callback with stored data: ${_tempMergedData!['transactions'].length} transactions');
+      final transactions = _tempMergedData!['transactions'] as List<TransactionModel>;
+      final settings = _tempMergedData!['settings'] as SettingsModel?;
+      
+      callback(transactions, settings);
+      
+      // Lösche die temporären Daten
+      _tempMergedData = null;
+      debugPrint('✅ Stored data processed and cleared');
+    }
   }
   
   // Current sync status
@@ -358,6 +375,29 @@ class CloudSyncService {
       
       await initializeForUser(cloudPassword);
       debugPrint('🔄 User initialized for sync');
+      
+      // WICHTIG: Setze einen Standard-Callback falls keiner gesetzt ist
+      if (_onDataUpdateCallback == null) {
+        debugPrint('⚠️ No data update callback set - setting default callback');
+        // Setze einen Standard-Callback der eine globale Benachrichtigung sendet
+        _onDataUpdateCallback = (transactions, settings) {
+          debugPrint('🔄 Default data update callback executed: ${transactions.length} transactions');
+          // Sende eine globale Benachrichtigung über den Sync-Status
+          _updateSyncStatus(
+            SyncState.idle, 
+            '${transactions.length} Transaktionen aus der Cloud geladen - Bitte App neu laden'
+          );
+          
+          // WICHTIG: Speichere die Daten temporär für späteren Abruf
+          _tempMergedData = {
+            'transactions': transactions,
+            'settings': settings,
+            'timestamp': DateTime.now(),
+          };
+          debugPrint('💾 Temporary data stored for later retrieval');
+        };
+      }
+      debugPrint('✅ Data update callback is ready');
       
       // 🔄 Intelligente Cloud-Synchronisierung: Hochladen UND Herunterladen
       debugPrint('📤 Starting intelligent cloud sync...');
