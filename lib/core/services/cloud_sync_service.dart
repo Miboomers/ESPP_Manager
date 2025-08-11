@@ -230,6 +230,9 @@ class CloudSyncService {
         throw Exception('Invalid PIN path: $_pinPath');
       }
       
+      // Clean up any existing invalid PIN path first
+      await _cleanupInvalidPinPath();
+      
       final pinHash = _hashPin(pin);
       final pinVersion = DateTime.now().millisecondsSinceEpoch;
       
@@ -278,6 +281,39 @@ class CloudSyncService {
       
       // Re-throw this error as it's critical for sync
       rethrow;
+    }
+  }
+  
+  /// Clean up any existing invalid PIN path
+  Future<void> _cleanupInvalidPinPath() async {
+    try {
+      debugPrint('🧹 Cleaning up any existing invalid PIN path...');
+      
+      // Check if PIN document exists
+      final existingPinDoc = await _firestore.doc(_pinPath).get();
+      
+      if (existingPinDoc.exists) {
+        debugPrint('🧹 Existing PIN document found, attempting to delete...');
+        
+        try {
+          // Try to delete the existing document
+          await _firestore.doc(_pinPath).delete();
+          debugPrint('✅ Existing PIN document deleted successfully');
+          
+          // Wait a moment for Firebase to process
+          await Future.delayed(const Duration(milliseconds: 300));
+          
+        } catch (deleteError) {
+          debugPrint('⚠️ Could not delete existing PIN document: $deleteError');
+          debugPrint('⚠️ This might be a permissions issue');
+        }
+      } else {
+        debugPrint('🧹 No existing PIN document found');
+      }
+      
+    } catch (e) {
+      debugPrint('⚠️ Error during PIN path cleanup: $e');
+      // Don't rethrow - cleanup errors are not critical
     }
   }
   
