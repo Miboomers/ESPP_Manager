@@ -5,6 +5,7 @@ import '../../core/security/auth_service.dart';
 import '../../core/security/cloud_password_service.dart';
 import '../../core/services/cloud_sync_service.dart';
 import '../../data/models/settings_model.dart';
+import '../../data/models/transaction_model.dart';
 import '../providers/settings_provider.dart';
 import '../providers/stock_price_provider.dart';
 import '../providers/transactions_provider.dart';
@@ -1132,18 +1133,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // Prüfe ob Cloud-Sync aktiviert ist
       final syncStatus = await cloudService.syncStatusStream.first;
       if (syncStatus.state == SyncState.idle) {
-        // Starte manuelle Synchronisierung
-        await cloudService.syncPendingChanges();
+        // 🔄 VOLLSTÄNDIGE manuelle Synchronisierung
+        debugPrint('🔄 Starting full manual sync...');
         
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Manuelle Synchronisierung erfolgreich abgeschlossen!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
+        try {
+          // 1. Lade alle Cloud-Daten herunter
+          debugPrint('📥 Downloading all cloud data...');
+          final cloudData = await cloudService.downloadAllData();
+          debugPrint('✅ Downloaded ${cloudData.transactions.length} transactions from cloud');
+          debugPrint('🔍 Cloud data details:');
+          debugPrint('   - Transactions: ${cloudData.transactions.length}');
+          debugPrint('   - Settings: ${cloudData.settings != null ? 'Available' : 'Not available'}');
+          if (cloudData.transactions.isNotEmpty) {
+            debugPrint('   - First transaction: ${cloudData.transactions.first.id}');
+            debugPrint('   - Last transaction: ${cloudData.transactions.last.id}');
+          }
+          
+          // 2. Aktualisiere lokale Provider mit Cloud-Daten
+          debugPrint('💾 Updating local providers with cloud data...');
+          await _updateLocalProvidersWithCloudData(cloudData);
+          debugPrint('✅ Local providers updated successfully');
+          
+          // 3. Lade alle lokalen Änderungen in die Cloud hoch
+          debugPrint('📤 Uploading local changes to cloud...');
+          await cloudService.syncPendingChanges();
+          debugPrint('✅ Local changes uploaded to cloud');
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Manuelle Synchronisierung erfolgreich! ${cloudData.transactions.length} Transaktionen geladen'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          
+        } catch (e) {
+          debugPrint('❌ Error during manual sync: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('❌ Fehler bei manueller Synchronisierung: $e'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
         }
+        
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1166,6 +1204,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         );
       }
+    }
+  }
+
+  /// Aktualisiert lokale Provider mit Cloud-Daten
+  Future<void> _updateLocalProvidersWithCloudData(
+    ({List<TransactionModel> transactions, SettingsModel? settings}) cloudData,
+  ) async {
+    try {
+      debugPrint('💾 Updating local providers with cloud data...');
+      
+      // Aktualisiere Transaktionen - lösche alle lokalen und füge Cloud-Daten hinzu
+      final transactionsNotifier = ref.read(transactionsProvider.notifier);
+      
+      // Hole aktuelle lokale Transaktionen
+      final currentTransactions = await ref.read(transactionsProvider.future);
+      debugPrint('🔍 Current local transactions: ${currentTransactions.length}');
+      
+      // Lösche alle lokalen Transaktionen
+      debugPrint('🗑️ Deleting ${currentTransactions.length} local transactions...');
+      for (final transaction in currentTransactions) {
+        debugPrint('   - Deleting: ${transaction.id}');
+        await transactionsNotifier.deleteTransaction(transaction.id);
+      }
+      debugPrint('✅ All local transactions deleted');
+      
+      // Füge alle Cloud-Transaktionen hinzu
+      debugPrint('➕ Adding ${cloudData.transactions.length} cloud transactions...');
+      for (final transaction in cloudData.transactions) {
+        debugPrint('   - Adding: ${transaction.id}');
+        await transactionsNotifier.addTransaction(transaction);
+      }
+      debugPrint('✅ All cloud transactions added');
+      
+      // Aktualisiere Einstellungen
+      if (cloudData.settings != null) {
+        debugPrint('⚙️ Updating settings...');
+        final settingsNotifier = ref.read(settingsProvider.notifier);
+        await settingsNotifier.updateSettings(cloudData.settings!);
+        debugPrint('✅ Settings updated');
+      } else {
+        debugPrint('ℹ️ No settings to update');
+      }
+      
+      // Prüfe den finalen Zustand
+      final finalTransactions = await ref.read(transactionsProvider.future);
+      debugPrint('🔍 Final state: ${finalTransactions.length} transactions in provider');
+      
+      debugPrint('✅ Local providers successfully updated');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to update local providers: $e');
+      debugPrint('❌ Error stack: ${StackTrace.current}');
+      rethrow;
     }
   }
 

@@ -98,6 +98,21 @@ class CloudSyncService {
   
   // Sync Status Stream
   final _syncStatusController = StreamController<SyncStatus>.broadcast();
+  
+  // 🔄 Echtzeit-Synchronisierung
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<QuerySnapshot>? _cloudDataSubscription;
+  Timer? _periodicSyncTimer;
+  
+  // 📱 Offline-Queue für Änderungen
+  final List<Map<String, dynamic>> _offlineQueue = [];
+  bool _isOnline = true;
+  
+  // 🔒 Konflikt-Auflösung
+  final Map<String, DateTime> _lastModifiedTimestamps = {};
+  
+  // 📊 Daten-Validierung
+  final Map<String, String> _dataHashes = {};
   Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
   
   // Current sync status
@@ -168,6 +183,124 @@ class CloudSyncService {
     );
     
     debugPrint('✅ Cloud Sync für User initialisiert');
+    
+    // 🔄 Starte Echtzeit-Synchronisierung
+    _startRealTimeSync();
+    
+    // 📱 Starte Offline-Überwachung
+    _startOfflineMonitoring();
+    
+    // ⏰ Starte periodische Synchronisierung
+    _startPeriodicSync();
+  }
+  
+  /// Starte Echtzeit-Synchronisierung der Cloud-Daten
+  void _startRealTimeSync() {
+    try {
+      debugPrint('🔄 Starting real-time cloud sync...');
+      
+      // Überwache Änderungen in der Cloud
+      _cloudDataSubscription = _firestore
+          .collection('$_userPath/transactions')
+          .snapshots()
+          .listen((snapshot) {
+        _handleCloudDataChanges(snapshot);
+      });
+      
+      debugPrint('✅ Real-time sync started');
+    } catch (e) {
+      debugPrint('⚠️ Failed to start real-time sync: $e');
+    }
+  }
+  
+  /// Starte Offline-Überwachung
+  void _startOfflineMonitoring() {
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen((result) {
+      _isOnline = result != ConnectivityResult.none;
+      
+      if (_isOnline && _offlineQueue.isNotEmpty) {
+        debugPrint('🌐 Back online - processing ${_offlineQueue.length} offline changes');
+        _processOfflineQueue();
+      }
+      
+      _updateSyncStatus(
+        _isOnline ? SyncState.idle : SyncState.offline,
+        _isOnline ? null : 'Offline - Änderungen werden gespeichert'
+      );
+    });
+  }
+  
+  /// Starte periodische Synchronisierung
+  void _startPeriodicSync() {
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
+      if (_isOnline && await isCloudSyncEnabled()) {
+        debugPrint('⏰ Periodic sync triggered');
+        syncPendingChanges();
+      }
+    });
+  }
+  
+  /// Behandle Cloud-Daten-Änderungen
+  void _handleCloudDataChanges(QuerySnapshot snapshot) {
+    try {
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added || 
+            change.type == DocumentChangeType.modified) {
+          debugPrint('🔄 Cloud data changed: ${change.doc.id}');
+          _notifyDataChange(change.doc.id, change.type);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error handling cloud data changes: $e');
+    }
+  }
+  
+  /// Benachrichtige über Datenänderungen
+  void _notifyDataChange(String documentId, DocumentChangeType changeType) {
+    // Hier können wir später Benachrichtigungen implementieren
+    debugPrint('📢 Data change: $changeType on $documentId');
+  }
+  
+  /// Verarbeite Offline-Queue
+  Future<void> _processOfflineQueue() async {
+    try {
+      debugPrint('📱 Processing ${_offlineQueue.length} offline changes...');
+      
+      for (final change in _offlineQueue) {
+        await _processOfflineChange(change);
+      }
+      
+      _offlineQueue.clear();
+      debugPrint('✅ Offline queue processed successfully');
+      
+    } catch (e) {
+      debugPrint('❌ Failed to process offline queue: $e');
+    }
+  }
+  
+  /// Verarbeite einzelne Offline-Änderung
+  Future<void> _processOfflineChange(Map<String, dynamic> change) async {
+    try {
+      final type = change['type'] as String;
+      final id = change['id'] as String;
+      final data = change['data'];
+      
+      switch (type) {
+        case 'transaction':
+          final transaction = TransactionModel.fromJson(data);
+          await syncTransaction(transaction);
+          break;
+        case 'settings':
+          final settings = SettingsModel.fromJson(data);
+          await syncSettings(settings);
+          break;
+        default:
+          debugPrint('⚠️ Unknown offline change type: $type');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Failed to process offline change: $e');
+    }
   }
   
   /// Generate encryption key from cloud password and user UID
