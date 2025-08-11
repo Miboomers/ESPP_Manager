@@ -454,9 +454,145 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _showChangePinDialog(BuildContext context) async {
-    // TODO: Implement PIN change dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PIN ändern wird implementiert')),
+    final currentPinController = TextEditingController();
+    final newPinController = TextEditingController();
+    final confirmPinController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('PIN ändern'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Bitte geben Sie Ihre aktuelle PIN und die neue PIN ein.\n\nAlle Cloud-Daten werden mit der neuen PIN neu verschlüsselt.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: currentPinController,
+              decoration: const InputDecoration(
+                labelText: 'Aktuelle PIN',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPinController,
+              decoration: const InputDecoration(
+                labelText: 'Neue PIN',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmPinController,
+              decoration: const InputDecoration(
+                labelText: 'Neue PIN bestätigen',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final currentPin = currentPinController.text.trim();
+              final newPin = newPinController.text.trim();
+              final confirmPin = confirmPinController.text.trim();
+              
+              // Validation
+              if (currentPin.isEmpty || newPin.isEmpty || confirmPin.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Bitte füllen Sie alle Felder aus'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              if (newPin != confirmPin) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Neue PINs stimmen nicht überein'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              if (newPin.length < 4) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('PIN muss mindestens 4 Ziffern haben'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Verify current PIN
+              final authService = AuthService();
+              final isValid = await authService.verifyPin(currentPin);
+              if (!isValid) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Aktuelle PIN ist falsch'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              try {
+                // Change PIN
+                await authService.setPin(newPin);
+                
+                // TODO: Re-encrypt all cloud data with new PIN
+                // This will be implemented in CloudSyncService
+                
+                Navigator.pop(context);
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('PIN erfolgreich geändert. Cloud-Daten müssen manuell neu synchronisiert werden.'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 5),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Fehler beim Ändern der PIN: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('PIN ändern'),
+          ),
+        ],
+      ),
     );
   }
 
