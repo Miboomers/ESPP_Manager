@@ -63,14 +63,14 @@ dependencies:
   share_plus: ^11.0.0
   path_provider: ^2.1.4
   open_file: ^3.5.10
-  file_picker: ^8.1.6
+  file_picker: ^10.2.4
   csv: ^6.0.0
   
   # Excel export
   excel: ^4.0.6
   
   # UI Components
-  fl_chart: ^0.69.0
+  fl_chart: ^1.0.0
   shimmer: ^3.0.0
   
   # Utilities

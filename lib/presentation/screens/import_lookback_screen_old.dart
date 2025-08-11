@@ -410,10 +410,9 @@ class _ImportLookbackScreenState extends ConsumerState<ImportLookbackScreen> {
                       ],
                     ),
                   ),
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
