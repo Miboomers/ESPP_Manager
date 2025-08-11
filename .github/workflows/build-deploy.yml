@@ -26,10 +26,10 @@ jobs:
     - name: Setup Firebase config for CI/CD
       shell: powershell
       run: |
-        # CI/CD uses stub config via firebase_config_loader.dart
-        # No need to copy files - stub is already imported by default
-        Write-Host "✅ Using stub Firebase config for CI/CD build"
-        Get-Content "lib\config\firebase_config_stub.dart" | Select-Object -First 5
+        # Copy stub config as firebase_config.dart for Windows build
+        Copy-Item "lib\config\firebase_config_stub.dart" -Destination "lib\config\firebase_config.dart"
+        Write-Host "✅ Created firebase_config.dart from stub for CI/CD build"
+        Get-Content "lib\config\firebase_config.dart" | Select-Object -First 5
         
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
