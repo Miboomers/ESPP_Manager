@@ -36,6 +36,36 @@ class CloudData {
   });
 }
 
+// Cloud Data Overview Model
+class CloudDataInfo {
+  final String status;
+  final int? count;
+  final String? lastModified;
+  final String? details;
+  
+  CloudDataInfo({
+    required this.status,
+    this.count,
+    this.lastModified,
+    this.details,
+  });
+}
+
+// Cloud Data Overview Response
+class CloudDataOverview {
+  final CloudDataInfo transactions;
+  final CloudDataInfo settings;
+  final CloudDataInfo pinInfo;
+  final CloudDataInfo lastSync;
+  
+  CloudDataOverview({
+    required this.transactions,
+    required this.settings,
+    required this.pinInfo,
+    required this.lastSync,
+  });
+}
+
 enum SyncState {
   idle,
   syncing,
@@ -480,6 +510,177 @@ class CloudSyncService {
       'supportsSecureStorage': _secureStorage != null,
       'platform': _getPlatformString(),
     };
+  }
+  
+  /// Get overview of cloud data
+  Future<CloudDataOverview> getCloudDataOverview() async {
+    try {
+      // Check if cloud sync is enabled
+      final isEnabled = await isCloudSyncEnabled();
+      if (!isEnabled) {
+        return CloudDataOverview(
+          transactions: CloudDataInfo(status: 'Cloud-Sync deaktiviert'),
+          settings: CloudDataInfo(status: 'Cloud-Sync deaktiviert'),
+          pinInfo: CloudDataInfo(status: 'Cloud-Sync deaktiviert'),
+          lastSync: CloudDataInfo(status: 'Cloud-Sync deaktiviert'),
+        );
+      }
+      
+      // Get transactions info
+      final transactionsInfo = await _getTransactionsInfo();
+      
+      // Get settings info
+      final settingsInfo = await _getSettingsInfo();
+      
+      // Get PIN info
+      final pinInfo = await _getPinInfo();
+      
+      // Get last sync info
+      final lastSyncInfo = await _getLastSyncInfo();
+      
+      return CloudDataOverview(
+        transactions: transactionsInfo,
+        settings: settingsInfo,
+        pinInfo: pinInfo,
+        lastSync: lastSyncInfo,
+      );
+    } catch (e) {
+      debugPrint('Error getting cloud data overview: $e');
+      return CloudDataOverview(
+        transactions: CloudDataInfo(status: 'Fehler: $e'),
+        settings: CloudDataInfo(status: 'Fehler: $e'),
+        pinInfo: CloudDataInfo(status: 'Fehler: $e'),
+        lastSync: CloudDataInfo(status: 'Fehler: $e'),
+      );
+    }
+  }
+  
+  /// Get transactions info from cloud
+  Future<CloudDataInfo> _getTransactionsInfo() async {
+    try {
+      final transSnapshot = await _firestore
+          .collection(_legacyTransactionsPath)
+          .where('deleted', isEqualTo: false)
+          .get();
+      
+      final count = transSnapshot.docs.length;
+      String? lastModified;
+      
+      if (count > 0) {
+        final lastDoc = transSnapshot.docs.reduce((a, b) {
+          final aTime = a.data()['lastModified'] as Timestamp?;
+          final bTime = b.data()['lastModified'] as Timestamp?;
+          if (aTime == null) return b;
+          if (bTime == null) return a;
+          return aTime.millisecondsSinceEpoch > bTime.millisecondsSinceEpoch ? a : b;
+        });
+        
+        final lastTime = lastDoc.data()['lastModified'] as Timestamp?;
+        if (lastTime != null) {
+          lastModified = '${lastTime.toDate().day}.${lastTime.toDate().month}.${lastTime.toDate().year} ${lastTime.toDate().hour}:${lastTime.toDate().minute}';
+        }
+      }
+      
+      return CloudDataInfo(
+        status: count > 0 ? 'Verfügbar' : 'Keine Daten',
+        count: count,
+        lastModified: lastModified,
+        details: count > 0 ? '$count Transaktionen in der Cloud' : 'Keine Transaktionen gefunden',
+      );
+    } catch (e) {
+      return CloudDataInfo(
+        status: 'Fehler beim Laden',
+        details: 'Fehler: $e',
+      );
+    }
+  }
+  
+  /// Get settings info from cloud
+  Future<CloudDataInfo> _getSettingsInfo() async {
+    try {
+      final settingsDoc = await _firestore.doc(_legacySettingsPath).get();
+      
+      if (!settingsDoc.exists) {
+        return CloudDataInfo(
+          status: 'Keine Daten',
+          details: 'Keine Einstellungen in der Cloud gefunden',
+        );
+      }
+      
+      final data = settingsDoc.data()!;
+      final lastTime = data['lastModified'] as Timestamp?;
+      String? lastModified;
+      
+      if (lastTime != null) {
+        lastModified = '${lastTime.toDate().day}.${lastTime.toDate().month}.${lastTime.toDate().year} ${lastTime.toDate().hour}:${lastTime.toDate().minute}';
+      }
+      
+      return CloudDataInfo(
+        status: 'Verfügbar',
+        count: 1,
+        lastModified: lastModified,
+        details: 'Einstellungen in der Cloud gespeichert',
+      );
+    } catch (e) {
+      return CloudDataInfo(
+        status: 'Fehler beim Laden',
+        details: 'Fehler: $e',
+      );
+    }
+  }
+  
+  /// Get PIN info from cloud
+  Future<CloudDataInfo> _getPinInfo() async {
+    try {
+      final pinDoc = await _firestore.doc(_pinPath).get();
+      
+      if (!pinDoc.exists) {
+        return CloudDataInfo(
+          status: 'Keine PIN-Info',
+          details: 'Keine PIN-Informationen in der Cloud gefunden',
+        );
+      }
+      
+      final data = pinDoc.data()!;
+      final version = data[_pinVersionKey] as int?;
+      final lastTime = data['updated_at'] as Timestamp?;
+      String? lastModified;
+      
+      if (lastTime != null) {
+        lastModified = '${lastTime.toDate().day}.${lastTime.toDate().month}.${lastTime.toDate().year} ${lastTime.toDate().hour}:${lastTime.toDate().minute}';
+      }
+      
+      return CloudDataInfo(
+        status: 'Verfügbar',
+        count: version,
+        lastModified: lastModified,
+        details: 'PIN-Version $version in der Cloud gespeichert',
+      );
+    } catch (e) {
+      return CloudDataInfo(
+        status: 'Fehler beim Laden',
+        details: 'Fehler: $e',
+      );
+    }
+  }
+  
+  /// Get last sync info
+  Future<CloudDataInfo> _getLastSyncInfo() async {
+    try {
+      final lastSync = _currentStatus.lastSync;
+      final lastSyncStr = '${lastSync.day}.${lastSync.month}.${lastSync.year} ${lastSync.hour}:${lastSync.minute}';
+      
+      return CloudDataInfo(
+        status: _currentStatus.state.name,
+        lastModified: lastSyncStr,
+        details: 'Letzte Synchronisation: ${_currentStatus.message ?? "Erfolgreich"}',
+      );
+    } catch (e) {
+      return CloudDataInfo(
+        status: 'Unbekannt',
+        details: 'Fehler beim Laden der Sync-Info: $e',
+      );
+    }
   }
   
   // PIN Management Methods

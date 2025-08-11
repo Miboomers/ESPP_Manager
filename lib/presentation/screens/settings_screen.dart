@@ -174,6 +174,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: Text('Daten werden automatisch synchronisiert'),
           ),
           
+          // Cloud Data Overview
+          ListTile(
+            leading: const Icon(Icons.cloud_queue),
+            title: const Text('Cloud-Daten anzeigen'),
+            subtitle: const Text('Übersicht der gespeicherten Daten in der Cloud'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => _showCloudDataOverview(context),
+          ),
+          
           // MFA Settings
           ListTile(
             leading: const Icon(Icons.security),
@@ -679,17 +688,132 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // 2. Reset local authentication state
       await _authService.logout();
       
-      // 3. Navigate back to login screen
+      // 3. Navigate back to login screen - simplified navigation
       if (mounted) {
+        // Use a simple navigation approach to avoid null issues
         Navigator.of(context).pushNamedAndRemoveUntil(
-          '/login', // Assuming you have a login route
+          '/', // Use root route instead of '/login'
           (route) => false, // Remove all previous routes
         );
       }
     } catch (e) {
       debugPrint('Error during logout: $e');
-      rethrow;
+      // Don't rethrow - just log the error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout abgeschlossen, aber es gab einen Fehler: $e'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     }
+  }
+  
+  /// Show cloud data overview
+  Future<void> _showCloudDataOverview(BuildContext context) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Lade Cloud-Daten...'),
+            ],
+          ),
+        ),
+      );
+      
+      // Get cloud data
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      final cloudData = await cloudService.getCloudDataOverview();
+      
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+      
+      // Show data overview
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cloud-Daten Übersicht'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildCloudDataSection('Transaktionen', cloudData.transactions),
+                  const SizedBox(height: 16),
+                  _buildCloudDataSection('Einstellungen', cloudData.settings),
+                  const SizedBox(height: 16),
+                  _buildCloudDataSection('PIN-Informationen', cloudData.pinInfo),
+                  const SizedBox(height: 16),
+                  _buildCloudDataSection('Letzte Synchronisation', cloudData.lastSync),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Schließen'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      // Show error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Laden der Cloud-Daten: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  /// Build cloud data section
+  Widget _buildCloudDataSection(String title, CloudDataInfo info) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Status: ${info.status}'),
+              if (info.count != null) Text('Anzahl: ${info.count}'),
+              if (info.lastModified != null) Text('Letzte Änderung: ${info.lastModified}'),
+              if (info.details != null) Text('Details: ${info.details}'),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _showAutoLockDialog(
