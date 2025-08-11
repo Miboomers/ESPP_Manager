@@ -211,7 +211,20 @@ class CloudSyncService {
     required String pin,
   }) async {
     try {
+      debugPrint('🚀 Starting cloud sync activation...');
+      debugPrint('🔍 Local transactions count: ${localTransactions.length}');
+      debugPrint('🔍 Local settings available: ${localSettings != null}');
+      debugPrint('🔍 PIN provided: ${pin.isNotEmpty ? 'Yes' : 'No'}');
+      
       _updateSyncStatus(SyncState.syncing, 'Cloud Sync wird aktiviert...');
+      
+      // Check user authentication
+      final currentUser = _auth.currentUser;
+      debugPrint('🔍 Current Firebase user: $currentUser');
+      if (currentUser != null) {
+        debugPrint('🔍 User UID: ${currentUser.uid}');
+        debugPrint('🔍 User email: ${currentUser.email}');
+      }
       
       await initializeForUser(pin);
       debugPrint('🔄 User initialized for sync');
@@ -229,6 +242,7 @@ class CloudSyncService {
       debugPrint('✅ PIN path verified before data upload');
       
       // Upload all local data to cloud
+      debugPrint('📤 Starting data upload to cloud...');
       await _uploadAllData(localTransactions, localSettings);
       debugPrint('✅ All data uploaded successfully');
       
@@ -237,6 +251,8 @@ class CloudSyncService {
       
     } catch (e) {
       debugPrint('❌ Critical error during cloud sync initialization: $e');
+      debugPrint('❌ Error type: ${e.runtimeType}');
+      debugPrint('❌ Error stack: ${StackTrace.current}');
       _updateSyncStatus(SyncState.error, 'Fehler: $e');
       rethrow;
     }
@@ -408,28 +424,57 @@ class CloudSyncService {
     List<TransactionModel> transactions,
     SettingsModel settings,
   ) async {
-    final batch = _firestore.batch();
-    
-    // Upload settings
-    final settingsRef = _firestore.doc('$_userPath/data/settings');
-    batch.set(settingsRef, {
-      'data': _encryptData(settings.toJson()),
-      'type': 'settings',
-      'lastModified': FieldValue.serverTimestamp(),
-    });
-    
-    // Upload transactions
-    for (final transaction in transactions) {
-      final transRef = _firestore.doc('$_userPath/transactions/${transaction.id}');
-      batch.set(transRef, {
-        'data': _encryptData(transaction.toJson()),
-        'type': 'transaction',
+    try {
+      debugPrint('📤 Starting data upload to cloud...');
+      debugPrint('🔍 User path: $_userPath');
+      debugPrint('🔍 Transactions to upload: ${transactions.length}');
+      debugPrint('🔍 Settings to upload: ${settings != null ? 'Yes' : 'No'}');
+      
+      // Validate user path before proceeding
+      if (_userPath.isEmpty || _userPath.contains('null')) {
+        throw Exception('Invalid user path: $_userPath');
+      }
+      
+      final batch = _firestore.batch();
+      
+      // Upload settings
+      final settingsRef = _firestore.doc('$_userPath/data/settings');
+      debugPrint('🔍 Uploading settings to: $_userPath/data/settings');
+      
+      final encryptedSettings = _encryptData(settings.toJson());
+      debugPrint('🔍 Settings encrypted successfully');
+      
+      batch.set(settingsRef, {
+        'data': encryptedSettings,
+        'type': 'settings',
         'lastModified': FieldValue.serverTimestamp(),
-        'deleted': false,
       });
+      
+      // Upload transactions
+      debugPrint('🔍 Uploading ${transactions.length} transactions...');
+      for (final transaction in transactions) {
+        final transRef = _firestore.doc('$_userPath/transactions/${transaction.id}');
+        debugPrint('🔍 Uploading transaction ${transaction.id} to: $_userPath/transactions/${transaction.id}');
+        
+        final encryptedTransaction = _encryptData(transaction.toJson());
+        batch.set(transRef, {
+          'data': encryptedTransaction,
+          'type': 'transaction',
+          'lastModified': FieldValue.serverTimestamp(),
+          'deleted': false,
+        });
+      }
+      
+      debugPrint('🔍 Committing batch to Firestore...');
+      await batch.commit();
+      debugPrint('✅ Batch committed successfully');
+      
+    } catch (e) {
+      debugPrint('❌ Error during data upload: $e');
+      debugPrint('❌ Error type: ${e.runtimeType}');
+      debugPrint('❌ Error stack: ${StackTrace.current}');
+      rethrow;
     }
-    
-    await batch.commit();
   }
   
   // Download all data (restore or new device)

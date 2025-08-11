@@ -4,8 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
   static const String _pinKey = 'user_pin';
@@ -43,48 +41,7 @@ class AuthService {
       await prefs.setString(_pinKey, hashedPin);
     }
     
-    // Initialize PIN path in cloud if user is authenticated
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        debugPrint('🔑 PIN gesetzt, initialisiere PIN-Pfad in der Cloud...');
-        await _initializePinPathInCloud(pin, user.uid);
-        debugPrint('✅ PIN-Pfad in der Cloud erfolgreich initialisiert');
-      } else {
-        debugPrint('ℹ️ User nicht bei Firebase angemeldet, PIN-Pfad wird später initialisiert');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Fehler beim Initialisieren des PIN-Pfads in der Cloud: $e');
-      // Don't rethrow - PIN setting should still work locally
-    }
-  }
-  
-  /// Initialize PIN path in cloud when PIN is set
-  Future<void> _initializePinPathInCloud(String pin, String uid) async {
-    try {
-      final firestore = FirebaseFirestore.instance;
-      final pinPath = 'users/$uid/pin';
-      
-      debugPrint('🔍 Initialisiere PIN-Pfad: $pinPath');
-      
-      final pinHash = _hashPin(pin);
-      final pinVersion = DateTime.now().millisecondsSinceEpoch;
-      
-      final pinData = {
-        'pin_hash': pinHash,
-        'pin_version': pinVersion,
-        'updated_at': FieldValue.serverTimestamp(),
-        'created_at': FieldValue.serverTimestamp(),
-        'initial_setup': true,
-      };
-      
-      await firestore.doc(pinPath).set(pinData);
-      debugPrint('✅ PIN-Dokument in der Cloud erstellt');
-      
-    } catch (e) {
-      debugPrint('❌ Fehler beim Erstellen des PIN-Dokuments: $e');
-      rethrow;
-    }
+    debugPrint('✅ PIN erfolgreich gesetzt und lokal gespeichert');
   }
   
   Future<bool> verifyPin(String pin) async {
