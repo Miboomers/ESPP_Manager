@@ -641,8 +641,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text('Abmelden'),
         content: const Text(
           'Möchten Sie sich wirklich abmelden?\n\n'
-          '• Ihre Daten bleiben verschlüsselt gespeichert\n'
-          '• Cloud-Synchronisation wird beendet\n'
+          '• Ihre Daten bleiben verschlüsselt gespeichert\n'         
           '• Sie müssen sich beim nächsten Start mit Ihrer PIN anmelden',
         ),
         actions: [
