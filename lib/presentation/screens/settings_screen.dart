@@ -595,22 +595,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
               
               try {
-                // Change cloud password
-                final cloudPasswordService = CloudPasswordService();
-                await cloudPasswordService.changeCloudPassword(currentPin, newPin);
-                
-                // Re-encrypt all cloud data with new password
-                final cloudService = ref.read(cloudSyncServiceProvider);
-                await cloudService.reEncryptWithNewPassword(currentPin, newPin);
+                // Change local PIN only
+                final authService = AuthService();
+                await authService.changePin(currentPin, newPin);
                 
                 Navigator.pop(context);
                 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Cloud-Passwort erfolgreich geändert. Alle Cloud-Daten wurden neu verschlüsselt.'),
+                      content: Text('PIN erfolgreich geändert'),
                       backgroundColor: Colors.green,
-                      duration: Duration(seconds: 5),
+                      duration: Duration(seconds: 3),
                     ),
                   );
                 }
@@ -618,7 +614,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Fehler beim Ändern des Cloud-Passworts: $e'),
+                      content: Text('Fehler beim Ändern der PIN: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -694,7 +690,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _performLogout() async {
     try {
       // 1. End Firebase Auth session
-      await FirebaseAuth.instance.signOut();
+      //await FirebaseAuth.instance.signOut();
       
       // 2. Reset local authentication state
       await _authService.logout();

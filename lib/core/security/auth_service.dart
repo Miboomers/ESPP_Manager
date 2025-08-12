@@ -44,6 +44,19 @@ class AuthService {
     debugPrint('✅ PIN erfolgreich gesetzt und lokal gespeichert');
   }
   
+  Future<void> changePin(String oldPin, String newPin) async {
+    // Verify old PIN first
+    final isValid = await verifyPin(oldPin);
+    if (!isValid) {
+      throw Exception('Aktuelle PIN ist falsch');
+    }
+    
+    // Set new PIN
+    await setPin(newPin);
+    
+    debugPrint('✅ PIN erfolgreich geändert');
+  }
+  
   Future<bool> verifyPin(String pin) async {
     String? storedHash;
     if (_secureStorage != null) {

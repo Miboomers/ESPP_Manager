@@ -451,9 +451,40 @@ class CloudSyncService {
       debugPrint('❌ Critical error during cloud sync initialization: $e');
       debugPrint('❌ Error type: ${e.runtimeType}');
       debugPrint('❌ Error stack: ${StackTrace.current}');
-      _updateSyncStatus(SyncState.error, 'Fehler: $e');
+      
+      // Deutsche Fehlermeldungen für bessere Benutzerfreundlichkeit
+      String userFriendlyMessage = _getGermanErrorMessage(e);
+      _updateSyncStatus(SyncState.error, userFriendlyMessage);
       rethrow;
     }
+  }
+  
+  /// Konvertiert technische Fehlermeldungen in benutzerfreundliche deutsche Texte
+  String _getGermanErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+    
+    if (errorString.contains('invalid or corrupted pad block')) {
+      return 'Verschlüsselungsfehler: Das Cloud-Passwort könnte falsch sein oder die Daten sind beschädigt. Bitte überprüfen Sie Ihr Passwort.';
+    }
+    
+    if (errorString.contains('invalid argument')) {
+      return 'Ungültige Eingabe: Bitte überprüfen Sie Ihre Eingaben und versuchen Sie es erneut.';
+    }
+    
+    if (errorString.contains('network') || errorString.contains('connection')) {
+      return 'Verbindungsfehler: Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.';
+    }
+    
+    if (errorString.contains('permission') || errorString.contains('unauthorized')) {
+      return 'Berechtigungsfehler: Sie haben keine Berechtigung für diese Aktion. Bitte melden Sie sich erneut an.';
+    }
+    
+    if (errorString.contains('timeout')) {
+      return 'Zeitüberschreitung: Die Verbindung zur Cloud hat zu lange gedauert. Bitte versuchen Sie es erneut.';
+    }
+    
+    // Fallback für unbekannte Fehler
+    return 'Ein unerwarteter Fehler ist aufgetreten: $error';
   }
   
   // Upload all data (initial sync)
@@ -1008,56 +1039,7 @@ class CloudSyncService {
     _updateSyncStatus(SyncState.idle, 'Cloud Sync deaktiviert');
   }
   
-  /// Change cloud password and re-encrypt all cloud data
-  Future<void> reEncryptWithNewPassword(String oldPassword, String newPassword) async {
-    try {
-      _updateSyncStatus(SyncState.syncing, 'Cloud-Passwort wird geändert und Daten neu verschlüsselt...');
-      
-      // 1. Download all cloud data with old password
-      final oldEncryptionKey = _generateEncryptionKey(oldPassword, _auth.currentUser!.uid);
-      final cloudData = await _downloadAllDataWithKey(oldEncryptionKey);
-      
-      // 2. Generate new encryption key
-      final newEncryptionKey = _generateEncryptionKey(newPassword, _auth.currentUser!.uid);
-      
-      // 3. Re-encrypt all data with new key
-      final reEncryptedData = await _reEncryptData(cloudData, newEncryptionKey);
-      
-      // 4. Update cloud password
-      final cloudPasswordService = CloudPasswordService();
-      await cloudPasswordService.changeCloudPassword(oldPassword, newPassword);
-      
-      // 5. Upload re-encrypted data
-      await _uploadAllDataWithKey(reEncryptedData, newEncryptionKey);
-      
-      // 6. Update local encryption key
-      _cloudEncryptionKey = newEncryptionKey;
-      
-      _updateSyncStatus(SyncState.idle, 'Cloud-Passwort erfolgreich geändert und alle Daten neu verschlüsselt');
-      
-    } catch (e) {
-      _updateSyncStatus(SyncState.error, 'Fehler bei Cloud-Passwort-Änderung: $e');
-      rethrow;
-    }
-  }
-  
-  /// Re-encrypt data with new encryption key
-  Future<Map<String, dynamic>> _reEncryptData(CloudData data, String newKey) async {
-    try {
-      final reEncryptedTransactions = await _encryptTransactions(data.transactions, newKey);
-      final reEncryptedSettings = data.settings != null 
-          ? await _encryptSettings(data.settings!, newKey)
-          : null;
-      
-      return {
-        'transactions': reEncryptedTransactions,
-        'settings': reEncryptedSettings,
-      };
-    } catch (e) {
-      debugPrint('Error re-encrypting data: $e');
-      rethrow;
-    }
-  }
+
   
   /// Upload all data with specific encryption key
   Future<void> _uploadAllDataWithKey(Map<String, dynamic> data, String encryptionKey) async {

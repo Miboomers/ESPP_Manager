@@ -627,39 +627,91 @@ class _CloudAuthScreenState extends ConsumerState<CloudAuthScreen> {
 
   Future<String?> _showCloudPasswordSetupDialog() async {
     final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showPassword = false;
     
     return await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Cloud-Passwort festlegen'),
-          content: TextField(
-            controller: passwordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Neues Cloud-Passwort',
-              hintText: 'Mindestens 8 Zeichen',
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('Abbrechen'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final password = passwordController.text;
-                if (password.length < 8) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Passwort muss mindestens 8 Zeichen haben.')),
-                  );
-                  return;
-                }
-                Navigator.of(context).pop(password);
-              },
-              child: const Text('Speichern'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Cloud-Passwort festlegen'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Erstes Passwort
+                  TextField(
+                    controller: passwordController,
+                    obscureText: !showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Neues Cloud-Passwort',
+                      hintText: 'Mindestens 8 Zeichen',
+                      suffixIcon: IconButton(
+                        icon: Icon(showPassword ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showPassword = !showPassword),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Passwort-Bestätigung
+                  TextField(
+                    controller: confirmPasswordController,
+                    obscureText: !showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Cloud-Passwort bestätigen',
+                      hintText: 'Passwort wiederholen',
+                      suffixIcon: IconButton(
+                        icon: Icon(showPassword ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showPassword = !showPassword),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Das Cloud-Passwort wird verwendet, um Ihre Daten in der Cloud zu verschlüsseln.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Abbrechen'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final password = passwordController.text;
+                    final confirmPassword = confirmPasswordController.text;
+                    
+                    if (password.length < 8) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Passwort muss mindestens 8 Zeichen haben.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    if (password != confirmPassword) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Passwörter stimmen nicht überein.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    Navigator.of(context).pop(password);
+                  },
+                  child: const Text('Speichern'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
