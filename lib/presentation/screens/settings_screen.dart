@@ -185,6 +185,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => _performManualSync(context),
           ),
           
+          // Cloud-Passwort ändern
+          ListTile(
+            leading: const Icon(Icons.lock_reset, color: Colors.orange),
+            title: const Text('Cloud-Passwort ändern'),
+            subtitle: const Text('Verschlüsselungspasswort für Cloud-Daten ändern'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => _showCloudPasswordChangeDialog(context),
+          ),
+          
           // Cloud Data Overview
           ListTile(
             leading: const Icon(Icons.cloud_queue),
@@ -1100,6 +1109,165 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Zeigt den Dialog zur Änderung des Cloud-Passworts
+  Future<void> _showCloudPasswordChangeDialog(BuildContext context) async {
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool showPasswords = false;
+    
+    return await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Cloud-Passwort ändern'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '⚠️ Wichtiger Hinweis:\n'
+                    'Das Ändern des Cloud-Passworts führt dazu, dass alle Cloud-Daten neu verschlüsselt werden. '
+                    'Dieser Vorgang kann einige Minuten dauern.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.orange[700],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Aktuelles Passwort
+                  TextField(
+                    controller: currentPasswordController,
+                    obscureText: !showPasswords,
+                    decoration: InputDecoration(
+                      labelText: 'Aktuelles Cloud-Passwort',
+                      hintText: 'Geben Sie Ihr aktuelles Passwort ein',
+                      suffixIcon: IconButton(
+                        icon: Icon(showPasswords ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showPasswords = !showPasswords),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Neues Passwort
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: !showPasswords,
+                    decoration: InputDecoration(
+                      labelText: 'Neues Cloud-Passwort',
+                      hintText: 'Mindestens 8 Zeichen',
+                      suffixIcon: IconButton(
+                        icon: Icon(showPasswords ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showPasswords = !showPasswords),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Passwort bestätigen
+                  TextField(
+                    controller: confirmPasswordController,
+                    obscureText: !showPasswords,
+                    decoration: InputDecoration(
+                      labelText: 'Neues Passwort bestätigen',
+                      hintText: 'Passwort wiederholen',
+                      suffixIcon: IconButton(
+                        icon: Icon(showPasswords ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => showPasswords = !showPasswords),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Toggle für alle Passwörter
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: showPasswords,
+                        onChanged: (value) => setState(() => showPasswords = value ?? false),
+                      ),
+                      const Text('Alle Passwörter anzeigen'),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Abbrechen'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    final currentPassword = currentPasswordController.text;
+                    final newPassword = newPasswordController.text;
+                    final confirmPassword = confirmPasswordController.text;
+                    
+                    // Validierung
+                    if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Bitte füllen Sie alle Felder aus.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    if (newPassword.length < 8) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Das neue Passwort muss mindestens 8 Zeichen haben.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    if (newPassword != confirmPassword) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Die neuen Passwörter stimmen nicht überein.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    // TODO: Implementiere Cloud-Passwort-Änderung
+                    // 1. Alle Cloud-Daten herunterladen
+                    // 2. Mit altem Passwort entschlüsseln
+                    // 3. Mit neuem Passwort neu verschlüsseln
+                    // 4. Alle Daten hochladen
+                    // 5. password_version Flag setzen
+                    
+                    Navigator.of(context).pop();
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cloud-Passwort-Änderung wird implementiert...'),
+                          backgroundColor: Colors.blue,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Passwort ändern'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
