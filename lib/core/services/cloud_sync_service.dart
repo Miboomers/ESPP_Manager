@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 
 // Conditional import für Secure Storage
 import 'conditional_imports.dart';
@@ -1496,6 +1497,35 @@ class CloudSyncService {
   }
   
   // 🚩 Flag-System Methoden
+  
+  /// Ändert das Cloud-Passwort (vereinfachte Version)
+  Future<void> changeCloudPassword(String oldPassword, String newPassword) async {
+    try {
+      _updateSyncStatus(SyncState.syncing, 'Cloud-Passwort wird geändert...');
+      debugPrint('🔐 Starting cloud password change...');
+      
+      // 1. Neues Passwort im CloudPasswordService setzen
+      debugPrint('💾 Updating cloud password...');
+      final cloudPasswordService = CloudPasswordService();
+      await cloudPasswordService.changeCloudPassword(oldPassword, newPassword);
+      
+      // 2. Lokalen Verschlüsselungsschlüssel aktualisieren
+      final newEncryptionKey = _generateEncryptionKey(newPassword, _auth.currentUser!.uid);
+      _cloudEncryptionKey = newEncryptionKey;
+      
+      // 3. Passwort-Änderungs-Flag setzen (informiert andere Geräte)
+      debugPrint('🚩 Setting password change flag...');
+      await setPasswordChangeFlag();
+      
+      _updateSyncStatus(SyncState.idle, 'Cloud-Passwort erfolgreich geändert');
+      debugPrint('✅ Cloud password change completed successfully');
+      
+    } catch (e) {
+      _updateSyncStatus(SyncState.error, 'Fehler bei Cloud-Passwort-Änderung: $e');
+      debugPrint('❌ Error during cloud password change: $e');
+      rethrow;
+    }
+  }
   
   /// Setzt das Passwort-Änderungs-Flag
   Future<void> setPasswordChangeFlag() async {

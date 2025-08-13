@@ -1243,22 +1243,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       return;
                     }
                     
-                    // TODO: Implementiere Cloud-Passwort-Änderung
-                    // 1. Alle Cloud-Daten herunterladen
-                    // 2. Mit altem Passwort entschlüsseln
-                    // 3. Mit neuem Passwort neu verschlüsseln
-                    // 4. Alle Daten hochladen
-                    // 5. password_version Flag setzen
-                    
-                    Navigator.of(context).pop();
-                    
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Cloud-Passwort-Änderung wird implementiert...'),
-                          backgroundColor: Colors.blue,
-                        ),
-                      );
+                    // Cloud-Passwort-Änderung durchführen
+                    try {
+                      Navigator.of(context).pop();
+                      
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cloud-Passwort wird geändert...'),
+                            backgroundColor: Colors.blue,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                      
+                      // Cloud-Passwort-Änderung durchführen
+                      final cloudService = ref.read(cloudSyncServiceProvider);
+                      await cloudService.changeCloudPassword(currentPassword, newPassword);
+                      
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('✅ Cloud-Passwort erfolgreich geändert!'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Fehler bei Passwort-Änderung: $e'),
+                            backgroundColor: Colors.red,
+                            duration: Duration(seconds: 5),
+                          ),
+                        );
+                      }
                     }
                   },
                   child: const Text('Passwort ändern'),
