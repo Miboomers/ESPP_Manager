@@ -11,17 +11,35 @@ class SecureStorageService {
   SecureStorageService(this._encryptionService);
   
   Future<void> initialize() async {
-    // Hive is already initialized in main.dart
-    _box = await Hive.openBox<String>(_boxName);
+    try {
+      // Hive is already initialized in main.dart
+      if (!_box.isOpen) {
+        _box = await Hive.openBox<String>(_boxName);
+      }
+    } catch (e) {
+      // Bei Fehlern neu öffnen
+      try {
+        await _box.close();
+      } catch (_) {}
+      _box = await Hive.openBox<String>(_boxName);
+    }
+  }
+  
+  Future<void> _ensureBoxOpen() async {
+    if (!_box.isOpen) {
+      await initialize();
+    }
   }
   
   Future<void> saveData(String key, Map<String, dynamic> data) async {
+    await _ensureBoxOpen();
     final encryptedData = _encryptionService.encryptMap(data);
     final jsonString = jsonEncode(encryptedData);
     await _box.put(key, jsonString);
   }
   
   Future<Map<String, dynamic>?> getData(String key) async {
+    await _ensureBoxOpen();
     final jsonString = _box.get(key);
     if (jsonString == null) return null;
     
@@ -34,6 +52,7 @@ class SecureStorageService {
   }
   
   Future<void> deleteData(String key) async {
+    await _ensureBoxOpen();
     await _box.delete(key);
   }
   

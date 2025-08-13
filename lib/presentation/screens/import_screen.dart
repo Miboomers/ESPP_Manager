@@ -300,14 +300,25 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         _isImporting = false;
       });
 
-      if (_importedTransactions > 0 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$_importedTransactions Transaktionen erfolgreich importiert!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+              if (_importedTransactions > 0 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$_importedTransactions Transaktionen erfolgreich importiert!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        
+        // WICHTIG: Import-Status zurücksetzen
+        setState(() {
+          _isImporting = false;
+          _status = 'Import abgeschlossen!';
+        });
+        
+        // Cloud-Sync-Status zurücksetzen
+        if (mounted) {
+          ref.invalidate(cloudSyncServiceProvider);
+        }
     } catch (e) {
       setState(() {
         _status = 'Import fehlgeschlagen: $e';
