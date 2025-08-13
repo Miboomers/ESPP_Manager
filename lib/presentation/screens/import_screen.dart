@@ -234,14 +234,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       // Jetzt importiere alle gesammelten Transaktionen
       await _importCollectedTransactions(transactionsByType);
 
-      // 🔄 SOFORTIGE Cloud-Synchronisierung nach erfolgreichem Import
-      // Warte NICHT auf Provider-Updates - synchronisiere direkt!
+      // 🔄 Cloud-Synchronisierung nach erfolgreichem Import (nur wenn aktiviert)
       bool isCloudSyncEnabled = false;
       if (_importedTransactions > 0) {
-        _logs.add('');
-        _logs.add('☁️ Starte automatische Cloud-Synchronisierung...');
-        setState(() {});
-        
         try {
           final cloudService = ref.read(cloudSyncServiceProvider);
           
@@ -250,7 +245,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           isCloudSyncEnabled = syncStatus.state != SyncState.idle;
           
           if (isCloudSyncEnabled) {
-            _logs.add('✅ Cloud-Sync ist aktiviert - synchronisiere neue Daten...');
+            _logs.add('');
+            _logs.add('☁️ Cloud-Sync ist aktiviert - starte automatische Synchronisierung...');
+            setState(() {});
             
             // 🔄 Direkte Cloud-Synchronisierung der neuen Transaktionen
             try {
@@ -278,10 +275,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               _logs.add('✅ Alternative Sync-Methode abgeschlossen');
             }
           } else {
+            _logs.add('');
             _logs.add('ℹ️ Cloud-Sync ist nicht aktiviert - überspringe Synchronisierung');
+            _logs.add('   → Daten wurden nur lokal gespeichert');
           }
         } catch (e) {
-          _logs.add('⚠️ Cloud-Synchronisierung fehlgeschlagen: $e');
+          _logs.add('');
+          _logs.add('⚠️ Cloud-Sync-Status konnte nicht ermittelt werden: $e');
           _logs.add('   → Daten wurden lokal gespeichert, aber nicht mit der Cloud synchronisiert');
         }
       }

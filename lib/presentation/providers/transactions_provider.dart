@@ -36,10 +36,13 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       
       state = AsyncValue.data(matchedTransactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung
+      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        await cloudService.syncPendingChanges();
+        final syncStatus = await cloudService.syncStatusStream.first;
+        if (syncStatus.state != SyncState.idle) {
+          await cloudService.syncPendingChanges();
+        }
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
@@ -56,10 +59,13 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung
+      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        await cloudService.syncPendingChanges();
+        final syncStatus = await cloudService.syncStatusStream.first;
+        if (syncStatus.state != SyncState.idle) {
+          await cloudService.syncPendingChanges();
+        }
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
@@ -76,10 +82,13 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung
+      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        await cloudService.syncPendingChanges();
+        final syncStatus = await cloudService.syncStatusStream.first;
+        if (syncStatus.state != SyncState.idle) {
+          await cloudService.syncPendingChanges();
+        }
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
