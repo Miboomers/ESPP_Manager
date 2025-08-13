@@ -286,6 +286,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         }
       }
 
+      // WICHTIG: Import-Status zurücksetzen und Zusammenfassung anzeigen
       setState(() {
         _status = 'Import abgeschlossen!';
         _logs.add('');
@@ -297,28 +298,23 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         if (_importedTransactions > 0) {
           _logs.add('☁️ Cloud-Sync: ${isCloudSyncEnabled ? 'Erfolgreich' : 'Nicht aktiviert'}');
         }
-        _isImporting = false;
+        _isImporting = false; // WICHTIG: Spinner stoppen!
       });
 
-              if (_importedTransactions > 0 && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$_importedTransactions Transaktionen erfolgreich importiert!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-        
-        // WICHTIG: Import-Status zurücksetzen
-        setState(() {
-          _isImporting = false;
-          _status = 'Import abgeschlossen!';
-        });
-        
-        // Cloud-Sync-Status zurücksetzen
-        if (mounted) {
-          ref.invalidate(cloudSyncServiceProvider);
-        }
+      // Snackbar anzeigen
+      if (_importedTransactions > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$_importedTransactions Transaktionen erfolgreich importiert!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      // Cloud-Sync-Status zurücksetzen
+      if (mounted) {
+        ref.invalidate(cloudSyncServiceProvider);
+      }
     } catch (e) {
       setState(() {
         _status = 'Import fehlgeschlagen: $e';
