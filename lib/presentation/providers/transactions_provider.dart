@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import '../../data/models/transaction_model.dart';
 import '../../data/repositories/transactions_repository.dart';
 import '../../core/utils/transaction_matcher.dart';
@@ -36,16 +37,14 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       
       state = AsyncValue.data(matchedTransactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
+      // 🔄 Automatische Cloud-Synchronisierung (vereinfacht)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        final syncStatus = await cloudService.syncStatusStream.first;
-        if (syncStatus.state != SyncState.idle) {
-          await cloudService.syncPendingChanges();
-        }
+        await cloudService.syncPendingChanges();
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
+        debugPrint('⚠️ Cloud-Sync fehlgeschlagen: $e');
       }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
@@ -59,16 +58,14 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
+      // 🔄 Automatische Cloud-Synchronisierung (vereinfacht)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        final syncStatus = await cloudService.syncStatusStream.first;
-        if (syncStatus.state != SyncState.idle) {
-          await cloudService.syncPendingChanges();
-        }
+        await cloudService.syncPendingChanges();
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
+        debugPrint('⚠️ Cloud-Sync fehlgeschlagen: $e');
       }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
@@ -82,16 +79,14 @@ class TransactionsNotifier extends AsyncNotifier<List<TransactionModel>> {
       final transactions = await repository.getAllTransactions();
       state = AsyncValue.data(transactions);
       
-      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
+      // 🔄 Automatische Cloud-Synchronisierung (vereinfacht)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        final syncStatus = await cloudService.syncStatusStream.first;
-        if (syncStatus.state != SyncState.idle) {
-          await cloudService.syncPendingChanges();
-        }
+        await cloudService.syncPendingChanges();
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Daten wurden lokal gespeichert
+        debugPrint('⚠️ Cloud-Sync fehlgeschlagen: $e');
       }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);

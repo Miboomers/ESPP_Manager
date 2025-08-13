@@ -30,13 +30,10 @@ class SettingsNotifier extends AsyncNotifier<SettingsModel> {
       await repository.saveSettings(settings);
       state = AsyncValue.data(settings);
       
-      // 🔄 Automatische Cloud-Synchronisierung (nur wenn aktiviert)
+      // 🔄 Automatische Cloud-Synchronisierung (vereinfacht)
       try {
         final cloudService = ref.read(cloudSyncServiceProvider);
-        final syncStatus = await cloudService.syncStatusStream.first;
-        if (syncStatus.state != SyncState.idle) {
-          await cloudService.syncPendingChanges();
-        }
+        await cloudService.syncPendingChanges();
       } catch (e) {
         // Cloud-Sync-Fehler nicht an den Benutzer weitergeben
         // Einstellungen wurden lokal gespeichert
