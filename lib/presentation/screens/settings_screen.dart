@@ -188,10 +188,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: Text(emailMessage),
                 trailing: isEmailVerified 
                   ? const Icon(Icons.check_circle, color: Colors.green)
-                  : IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () => _refreshEmailVerification(context),
-                      tooltip: 'E-Mail-Status prüfen',
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: () => _refreshEmailVerification(context),
+                          tooltip: 'E-Mail-Status prüfen',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.email_outlined),
+                          onPressed: () => _resendVerificationEmail(context),
+                          tooltip: 'E-Mail-Bestätigung erneut senden',
+                        ),
+                      ],
                     ),
               );
             },
@@ -733,6 +743,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
   
+  /// Resend verification email
+  Future<void> _resendVerificationEmail(BuildContext context) async {
+    try {
+      final cloudService = ref.read(cloudSyncServiceProvider);
+      
+      if (!cloudService.canResendVerificationEmail) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('E-Mail-Bestätigung kann nicht erneut gesendet werden'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Show loading indicator
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('E-Mail-Bestätigung wird gesendet...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Send verification email
+      await cloudService.sendEmailVerification();
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ E-Mail-Bestätigung wurde erneut gesendet!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Fehler beim Senden der E-Mail: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   /// Refresh email verification status
   Future<void> _refreshEmailVerification(BuildContext context) async {
     try {

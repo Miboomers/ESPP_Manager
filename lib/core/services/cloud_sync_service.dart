@@ -506,8 +506,34 @@ class CloudSyncService {
     if (isEmailVerified) {
       return 'E-Mail bestätigt - Cloud-Sync aktiv';
     } else {
-      return 'E-Mail bestätigung erforderlich - Cloud-Sync deaktiviert';
+      return 'E-Mail-Bestätigung erforderlich - Cloud-Sync deaktiviert';
     }
+  }
+  
+  // Send email verification email
+  Future<void> sendEmailVerification() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception('Kein User angemeldet');
+      }
+      
+      if (user.emailVerified) {
+        throw Exception('E-Mail ist bereits bestätigt');
+      }
+      
+      await user.sendEmailVerification();
+      debugPrint('✅ E-Mail-Bestätigung gesendet an ${user.email}');
+    } catch (e) {
+      debugPrint('❌ Fehler beim Senden der E-Mail-Bestätigung: $e');
+      rethrow;
+    }
+  }
+  
+  // Check if user can resend verification email
+  bool get canResendVerificationEmail {
+    final user = _auth.currentUser;
+    return user != null && !user.emailVerified;
   }
   
   // Enable cloud sync
