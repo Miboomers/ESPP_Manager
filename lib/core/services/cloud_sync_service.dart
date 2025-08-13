@@ -1405,29 +1405,49 @@ class CloudSyncService {
         SettingsModel? cloudSettings,
       ) async {
     try {
-      debugPrint('🔄 Starting data merge...');
+      debugPrint('🔄 Starting intelligent data merge...');
       debugPrint('   Local: ${localTransactions.length} transactions');
       debugPrint('   Cloud: ${cloudTransactions.length} transactions');
       
       final mergedTransactions = <TransactionModel>[];
       final processedIds = <String>{};
+      final processedContentHashes = <String>{};
       
       // 1. Füge alle lokalen Transaktionen hinzu
       for (final localTx in localTransactions) {
         mergedTransactions.add(localTx);
         processedIds.add(localTx.id);
+        processedContentHashes.add(_generateContentHash(localTx));
         debugPrint('   → Added local transaction: ${localTx.id}');
       }
       
-      // 2. Füge Cloud-Transaktionen hinzu, die nicht lokal existieren
+      // 2. Intelligente Cloud-Transaktionen-Integration
       for (final cloudTx in cloudTransactions) {
-        if (!processedIds.contains(cloudTx.id)) {
-          mergedTransactions.add(cloudTx);
-          processedIds.add(cloudTx.id);
-          debugPrint('   → Added cloud transaction: ${cloudTx.id}');
-        } else {
-          debugPrint('   → Skipped duplicate cloud transaction: ${cloudTx.id}');
+        final contentHash = _generateContentHash(cloudTx);
+        
+        // Prüfe auf ID-Duplikate
+        if (processedIds.contains(cloudTx.id)) {
+          debugPrint('   → Skipped duplicate ID: ${cloudTx.id}');
+          continue;
         }
+        
+        // Prüfe auf Inhalts-Duplikate (gleiche Daten, andere ID)
+        if (processedContentHashes.contains(contentHash)) {
+          debugPrint('   → Skipped duplicate content: ${cloudTx.id} (hash: ${contentHash.substring(0, 8)}...)');
+          continue;
+        }
+        
+        // Prüfe auf zeitliche Überschneidungen
+        if (_hasTimeOverlap(cloudTx, mergedTransactions)) {
+          debugPrint('   → Skipped time overlap: ${cloudTx.id}');
+          continue;
+        }
+        
+        // Transaktion ist eindeutig - hinzufügen
+        mergedTransactions.add(cloudTx);
+        processedIds.add(cloudTx.id);
+        processedContentHashes.add(contentHash);
+        debugPrint('   → Added unique cloud transaction: ${cloudTx.id}');
       }
       
       // 3. Einstellungen zusammenführen (lokale haben Vorrang)
@@ -1436,7 +1456,8 @@ class CloudSyncService {
         debugPrint('   → Merged settings (local has priority)');
       }
       
-      debugPrint('✅ Merge completed: ${mergedTransactions.length} total transactions');
+      debugPrint('✅ Intelligent merge completed: ${mergedTransactions.length} total transactions');
+      debugPrint('   → Duplicates prevented: ${localTransactions.length + cloudTransactions.length - mergedTransactions.length}');
       
       return (
         transactions: mergedTransactions,
@@ -1448,6 +1469,39 @@ class CloudSyncService {
     }
   }
   
+  /// Generiert einen Hash für den Inhalt einer Transaktion (ohne ID)
+  String _generateContentHash(TransactionModel transaction) {
+    final content = '${transaction.type}_${transaction.purchaseDate}_${transaction.saleDate}_${transaction.quantity}_${transaction.purchasePricePerShare}_${transaction.salePricePerShare}_${transaction.exchangeRateAtPurchase}';
+    return _hashString(content);
+  }
+  
+  /// Prüft auf zeitliche Überschneidungen mit bestehenden Transaktionen
+  bool _hasTimeOverlap(TransactionModel newTx, List<TransactionModel> existingTx) {
+    for (final existing in existingTx) {
+      // Prüfe ob sich die Zeiträume überschneiden
+      if (newTx.purchaseDate.isBefore(existing.purchaseDate.add(const Duration(days: 1))) &&
+          newTx.purchaseDate.isAfter(existing.purchaseDate.subtract(const Duration(days: 1)))) {
+        // Gleicher Tag - prüfe auf ähnliche Werte
+        if (newTx.quantity == existing.quantity &&
+            newTx.purchasePricePerShare == existing.purchasePricePerShare &&
+            newTx.type == existing.type) {
+          return true; // Wahrscheinlich ein Duplikat
+        }
+      }
+    }
+    return false;
+  }
+  
+  /// Einfache String-Hash-Funktion
+  String _hashString(String input) {
+    int hash = 0;
+    for (int i = 0; i < input.length; i++) {
+      int char = input.codeUnitAt(i);
+      hash = ((hash << 5) - hash + char) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16);
+  }
+  
   /// Aktualisiert lokale Daten mit zusammengeführten Daten
   Future<void> _updateLocalData(
     List<TransactionModel> mergedTransactions,
@@ -1455,6 +1509,7 @@ class CloudSyncService {
   ) async {
     try {
       debugPrint('💾 Updating local data with merged data...');
+      debugPrint('   → ${mergedTransactions.length} transactions to update');
       
       // WICHTIG: Verwende den Callback um die lokalen Provider zu aktualisieren
       if (_onDataUpdateCallback != null) {
@@ -1463,22 +1518,31 @@ class CloudSyncService {
         debugPrint('✅ Data update callback executed');
       } else {
         debugPrint('⚠️ No data update callback set - Provider werden nicht aktualisiert!');
-        debugPrint('💡 Versuche direkte Aktualisierung der lokalen Datenbasis...');
-        
-        // WICHTIG: Direkte Aktualisierung der lokalen Datenbasis
-        await _updateLocalDatabase(mergedTransactions, mergedSettings);
-        
-        // Fallback: Sende eine globale Benachrichtigung
-        _updateSyncStatus(
-          SyncState.idle, 
-          '${mergedTransactions.length} Transaktionen in lokale Datenbasis geschrieben - App wird aktualisiert'
-        );
       }
+      
+      // WICHTIG: Zusätzlich die lokale Datenbasis direkt aktualisieren
+      debugPrint('💾 Updating local database directly...');
+      await _updateLocalDatabase(mergedTransactions, mergedSettings);
+      
+      // WICHTIG: Sende eine globale Benachrichtigung für UI-Updates
+      _updateSyncStatus(
+        SyncState.idle, 
+        '${mergedTransactions.length} Transaktionen aktualisiert - App wird neu geladen'
+      );
+      
+      // WICHTIG: Speichere die Daten temporär für späteren Abruf
+      _tempMergedData = {
+        'transactions': mergedTransactions,
+        'settings': mergedSettings,
+        'timestamp': DateTime.now(),
+      };
+      debugPrint('💾 Temporary data stored for later retrieval');
       
       debugPrint('✅ Local data update completed');
       debugPrint('   → ${mergedTransactions.length} transactions available');
       debugPrint('   → Settings updated');
-      debugPrint('   → Provider update callback executed');
+      debugPrint('   → Local database updated');
+      debugPrint('   → Temporary data stored');
       
     } catch (e) {
       debugPrint('❌ Error updating local data: $e');
