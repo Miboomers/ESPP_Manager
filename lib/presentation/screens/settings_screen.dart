@@ -169,11 +169,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             
             if (currentUser != null) ...[
-          // Sync Status
-          const ListTile(
-            leading: Icon(Icons.cloud_done),
-            title: Text('Synchronisiert'),
-            subtitle: Text('Daten werden automatisch synchronisiert'),
+          // E-Mail-Bestätigungsstatus
+          Consumer(
+            builder: (context, ref, child) {
+              final cloudService = ref.watch(cloudSyncServiceProvider);
+              final isEmailVerified = cloudService.isEmailVerified;
+              final emailMessage = cloudService.emailVerificationMessage;
+              
+              return ListTile(
+                leading: Icon(
+                  isEmailVerified ? Icons.email : Icons.email_outlined,
+                  color: isEmailVerified ? Colors.green : Colors.orange,
+                ),
+                title: Text(isEmailVerified ? 'E-Mail bestätigt' : 'E-Mail-Bestätigung erforderlich'),
+                subtitle: Text(emailMessage),
+                trailing: isEmailVerified 
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () => _refreshEmailVerification(context),
+                      tooltip: 'E-Mail-Status prüfen',
+                    ),
+              );
+            },
+          ),
+          
+          // Sync Status (nur wenn E-Mail bestätigt)
+          Consumer(
+            builder: (context, ref, child) {
+              final cloudService = ref.watch(cloudSyncServiceProvider);
+              if (!cloudService.isEmailVerified) return const SizedBox.shrink();
+              
+              return const ListTile(
+                leading: Icon(Icons.cloud_done),
+                title: Text('Synchronisiert'),
+                subtitle: Text('Daten werden automatisch synchronisiert'),
+              );
+            },
           ),
           
           // Manueller Sync
@@ -695,6 +727,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
   
+  /// Refresh email verification status
+  Future<void> _refreshEmailVerification(BuildContext context) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Reload user to get latest email verification status
+        await user.reload();
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                user.emailVerified 
+                  ? '✅ E-Mail bestätigt! Cloud-Sync ist jetzt aktiv.'
+                  : '⚠️ E-Mail noch nicht bestätigt. Bitte prüfen Sie Ihren Posteingang.'
+              ),
+              backgroundColor: user.emailVerified ? Colors.green : Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Prüfen des E-Mail-Status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   /// Perform the actual logout
   Future<void> _performLogout() async {
     try {

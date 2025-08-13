@@ -482,11 +482,32 @@ class CloudSyncService {
     final uid = user.uid;
     if (uid.isEmpty) return false;
     
+    // WICHTIG: Prüfe ob E-Mail bestätigt wurde
+    if (!user.emailVerified) {
+      debugPrint('⚠️ Cloud-Sync deaktiviert: E-Mail nicht bestätigt');
+      return false;
+    }
+    
     _cloudEncryptionKey ??= await _secureStorage.read(
       key: 'cloud_encryption_key_$uid',
     );
     
     return _cloudEncryptionKey != null;
+  }
+  
+  // Check if user email is verified
+  bool get isEmailVerified {
+    final user = _auth.currentUser;
+    return user?.emailVerified ?? false;
+  }
+  
+  // Get email verification status message
+  String get emailVerificationMessage {
+    if (isEmailVerified) {
+      return 'E-Mail bestätigt - Cloud-Sync aktiv';
+    } else {
+      return 'E-Mail bestätigung erforderlich - Cloud-Sync deaktiviert';
+    }
   }
   
   // Enable cloud sync
