@@ -67,6 +67,63 @@ class CloudDataOverview {
   });
 }
 
+// Cloud Flags für Multi-Device-Synchronisation
+class CloudFlags {
+  final int passwordVersion;
+  final DateTime lastDataUpdate;
+  final DateTime lastFlagUpdate;
+  final bool hasPasswordChange;
+  final bool hasDataUpdate;
+  
+  CloudFlags({
+    required this.passwordVersion,
+    required this.lastDataUpdate,
+    required this.lastFlagUpdate,
+    this.hasPasswordChange = false,
+    this.hasDataUpdate = false,
+  });
+  
+  factory CloudFlags.fromJson(Map<String, dynamic> json) {
+    return CloudFlags(
+      passwordVersion: json['password_version'] ?? 1,
+      lastDataUpdate: json['last_data_update'] != null 
+          ? (json['last_data_update'] as Timestamp).toDate()
+          : DateTime.now(),
+      lastFlagUpdate: json['last_flag_update'] != null 
+          ? (json['last_flag_update'] as Timestamp).toDate()
+          : DateTime.now(),
+      hasPasswordChange: json['has_password_change'] ?? false,
+      hasDataUpdate: json['has_data_update'] ?? false,
+    );
+  }
+  
+  Map<String, dynamic> toJson() {
+    return {
+      'password_version': passwordVersion,
+      'last_data_update': Timestamp.fromDate(lastDataUpdate),
+      'last_flag_update': Timestamp.fromDate(lastFlagUpdate),
+      'has_password_change': hasPasswordChange,
+      'has_data_update': hasDataUpdate,
+    };
+  }
+  
+  CloudFlags copyWith({
+    int? passwordVersion,
+    DateTime? lastDataUpdate,
+    DateTime? lastFlagUpdate,
+    bool? hasPasswordChange,
+    bool? hasDataUpdate,
+  }) {
+    return CloudFlags(
+      passwordVersion: passwordVersion ?? this.passwordVersion,
+      lastDataUpdate: lastDataUpdate ?? this.lastDataUpdate,
+      lastFlagUpdate: lastFlagUpdate ?? this.lastFlagUpdate,
+      hasPasswordChange: hasPasswordChange ?? this.hasPasswordChange,
+      hasDataUpdate: hasDataUpdate ?? this.hasDataUpdate,
+    );
+  }
+}
+
 enum SyncState {
   idle,
   syncing,
@@ -99,6 +156,15 @@ class CloudSyncService {
   // Sync Status Stream
   final _syncStatusController = StreamController<SyncStatus>.broadcast();
   
+  // Flag-System für Multi-Device-Synchronisation
+  final _flagController = StreamController<CloudFlags>.broadcast();
+  Timer? _flagCheckTimer;
+  static const Duration _flagCheckInterval = Duration(seconds: 30);
+  
+  // Cloud Flags für Multi-Device-Synchronisation
+  CloudFlags? _currentFlags;
+  DateTime? _lastFlagCheck;
+  
   // 🔄 Echtzeit-Synchronisierung
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   StreamSubscription<QuerySnapshot>? _cloudDataSubscription;
@@ -121,6 +187,10 @@ class CloudSyncService {
   Map<String, dynamic>? _tempMergedData;
   
   Stream<SyncStatus> get syncStatusStream => _syncStatusController.stream;
+  
+  // Flag-System Getter
+  Stream<CloudFlags> get flagStream => _flagController.stream;
+  CloudFlags? get currentFlags => _currentFlags;
   
   /// Setzt den Callback für Provider-Updates
   void setDataUpdateCallback(Function(List<TransactionModel>, SettingsModel?) callback) {
@@ -264,6 +334,73 @@ class CloudSyncService {
         syncPendingChanges();
       }
     });
+    
+    // 🚩 Starte Flag-Überprüfung
+    _startFlagMonitoring();
+  }
+  
+  /// Starte Flag-Überwachung für Multi-Device-Synchronisation
+  void _startFlagMonitoring() {
+    _flagCheckTimer = Timer.periodic(_flagCheckInterval, (timer) async {
+      if (_isOnline && await isCloudSyncEnabled()) {
+        await _checkCloudFlags();
+      }
+    });
+    debugPrint('🚩 Flag monitoring started - checking every ${_flagCheckInterval.inSeconds} seconds');
+  }
+  
+  /// Überprüfe Cloud-Flags für Multi-Device-Synchronisation
+  Future<void> _checkCloudFlags() async {
+    try {
+      final flagsRef = _firestore.doc('$_userPath/flags');
+      final flagsDoc = await flagsRef.get();
+      
+      if (flagsDoc.exists) {
+        final flagsData = flagsDoc.data()!;
+        final newFlags = CloudFlags.fromJson(flagsData);
+        
+        // Prüfe ob sich die Flags geändert haben
+        if (_currentFlags == null || _currentFlags!.passwordVersion != newFlags.passwordVersion) {
+          debugPrint('🚩 Password version changed: ${_currentFlags?.passwordVersion ?? 'none'} → ${newFlags.passwordVersion}');
+          _currentFlags = newFlags;
+          _flagController.add(newFlags);
+          
+          // Benachrichtige über Passwort-Änderung
+          if (newFlags.hasPasswordChange) {
+            debugPrint('🚩 Password change detected - user needs to update password');
+            // TODO: Benachrichtige UI über Passwort-Änderung
+          }
+        }
+        
+        if (_currentFlags == null || _currentFlags!.lastDataUpdate != newFlags.lastDataUpdate) {
+          debugPrint('🚩 Data update detected: ${newFlags.lastDataUpdate}');
+          _currentFlags = newFlags;
+          _flagController.add(newFlags);
+          
+          // Benachrichtige über Daten-Updates
+          if (newFlags.hasDataUpdate) {
+            debugPrint('🚩 Data update detected - triggering sync');
+            await syncPendingChanges();
+          }
+        }
+        
+        _lastFlagCheck = DateTime.now();
+      } else {
+        // Erstelle Standard-Flags wenn sie nicht existieren
+        final defaultFlags = CloudFlags(
+          passwordVersion: 1,
+          lastDataUpdate: DateTime.now(),
+          lastFlagUpdate: DateTime.now(),
+        );
+        
+        await flagsRef.set(defaultFlags.toJson());
+        _currentFlags = defaultFlags;
+        _flagController.add(defaultFlags);
+        debugPrint('🚩 Default flags created');
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking cloud flags: $e');
+    }
   }
   
   /// Behandle Cloud-Daten-Änderungen
@@ -1356,5 +1493,81 @@ class CloudSyncService {
     if (defaultTargetPlatform == TargetPlatform.windows) return 'windows';
     if (defaultTargetPlatform == TargetPlatform.linux) return 'linux';
     return 'unknown';
+  }
+  
+  // 🚩 Flag-System Methoden
+  
+  /// Setzt das Passwort-Änderungs-Flag
+  Future<void> setPasswordChangeFlag() async {
+    try {
+      final flagsRef = _firestore.doc('$_userPath/flags');
+      final currentFlags = _currentFlags ?? CloudFlags(
+        passwordVersion: 1,
+        lastDataUpdate: DateTime.now(),
+        lastFlagUpdate: DateTime.now(),
+      );
+      
+      final updatedFlags = currentFlags.copyWith(
+        passwordVersion: currentFlags.passwordVersion + 1,
+        hasPasswordChange: true,
+        lastFlagUpdate: DateTime.now(),
+      );
+      
+      await flagsRef.set(updatedFlags.toJson());
+      _currentFlags = updatedFlags;
+      _flagController.add(updatedFlags);
+      
+      debugPrint('🚩 Password change flag set - version ${updatedFlags.passwordVersion}');
+    } catch (e) {
+      debugPrint('❌ Error setting password change flag: $e');
+      rethrow;
+    }
+  }
+  
+  /// Setzt das Daten-Update-Flag
+  Future<void> setDataUpdateFlag() async {
+    try {
+      final flagsRef = _firestore.doc('$_userPath/flags');
+      final currentFlags = _currentFlags ?? CloudFlags(
+        passwordVersion: 1,
+        lastDataUpdate: DateTime.now(),
+        lastFlagUpdate: DateTime.now(),
+      );
+      
+      final updatedFlags = currentFlags.copyWith(
+        lastDataUpdate: DateTime.now(),
+        hasDataUpdate: true,
+        lastFlagUpdate: DateTime.now(),
+      );
+      
+      await flagsRef.set(updatedFlags.toJson());
+      _currentFlags = updatedFlags;
+      _flagController.add(updatedFlags);
+      
+      debugPrint('🚩 Data update flag set - ${updatedFlags.lastDataUpdate}');
+    } catch (e) {
+      debugPrint('❌ Error setting data update flag: $e');
+      rethrow;
+    }
+  }
+  
+  /// Löscht alle Flags (für Reset)
+  Future<void> clearFlags() async {
+    try {
+      final flagsRef = _firestore.doc('$_userPath/flags');
+      await flagsRef.delete();
+      
+      _currentFlags = null;
+      debugPrint('🚩 All flags cleared');
+    } catch (e) {
+      debugPrint('❌ Error clearing flags: $e');
+      rethrow;
+    }
+  }
+  
+  /// Cleanup beim Beenden
+  void _disposeFlags() {
+    _flagCheckTimer?.cancel();
+    _flagController.close();
   }
 }
