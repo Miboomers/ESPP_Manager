@@ -170,11 +170,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             
             if (currentUser != null) ...[
           // E-Mail-Bestätigungsstatus
-          Consumer(
-            builder: (context, ref, child) {
-              final cloudService = ref.watch(cloudSyncServiceProvider);
-              final isEmailVerified = cloudService.isEmailVerified;
-              final emailMessage = cloudService.emailVerificationMessage;
+          StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, authSnapshot) {
+              final user = authSnapshot.data;
+              final isEmailVerified = user?.emailVerified ?? false;
+              final emailMessage = isEmailVerified 
+                ? 'E-Mail bestätigt - Cloud-Sync aktiv'
+                : 'E-Mail-Bestätigung erforderlich - Cloud-Sync deaktiviert';
               
               return ListTile(
                 leading: Icon(
@@ -195,10 +198,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           
           // Sync Status (nur wenn E-Mail bestätigt)
-          Consumer(
-            builder: (context, ref, child) {
-              final cloudService = ref.watch(cloudSyncServiceProvider);
-              if (!cloudService.isEmailVerified) return const SizedBox.shrink();
+          StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, authSnapshot) {
+              final user = authSnapshot.data;
+              final isEmailVerified = user?.emailVerified ?? false;
+              
+              if (!isEmailVerified) return const SizedBox.shrink();
               
               return const ListTile(
                 leading: Icon(Icons.cloud_done),

@@ -287,19 +287,28 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       }
 
       // WICHTIG: Import-Status zurücksetzen und Zusammenfassung anzeigen
-      setState(() {
-        _status = 'Import abgeschlossen!';
-        _logs.add('');
-        _logs.add('=== ZUSAMMENFASSUNG ===');
-        _logs.add('Dateien verarbeitet: $_selectedFiles.length');
-        _logs.add('Gesamt: $_totalTransactions Transaktionen');
-        _logs.add('Importiert: $_importedTransactions');
-        _logs.add('Fehler: $_errorTransactions');
-        if (_importedTransactions > 0) {
-          _logs.add('☁️ Cloud-Sync: ${isCloudSyncEnabled ? 'Erfolgreich' : 'Nicht aktiviert'}');
-        }
-        _isImporting = false; // WICHTIG: Spinner stoppen!
-      });
+      if (mounted) {
+        setState(() {
+          _status = 'Import abgeschlossen!';
+          _logs.add('');
+          _logs.add('=== ZUSAMMENFASSUNG ===');
+          _logs.add('Dateien verarbeitet: $_selectedFiles.length');
+          _logs.add('Gesamt: $_totalTransactions Transaktionen');
+          _logs.add('Importiert: $_importedTransactions');
+          _logs.add('Fehler: $_errorTransactions');
+          if (_importedTransactions > 0) {
+            _logs.add('☁️ Cloud-Sync: ${isCloudSyncEnabled ? 'Erfolgreich' : 'Nicht aktiviert'}');
+          }
+          _isImporting = false; // WICHTIG: Spinner stoppen!
+        });
+        
+        // Zusätzliche Sicherheit: State explizit aktualisieren
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {});
+          }
+        });
+      }
 
       // Snackbar anzeigen
       if (_importedTransactions > 0 && mounted) {
